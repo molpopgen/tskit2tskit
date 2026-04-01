@@ -1,0 +1,13 @@
+[package]
+name = "tskit2tskit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libc = "0.2.183"
+pyo3 = "0.27.0"
+tskit = { features = ["derive", "bindings"], git = "https://github.com/tskit-dev/tskit-rust" }
+
+[dev-dependencies]
+pyo3 = { version = "0.27.0", features = ["auto-initialize"] }
+
