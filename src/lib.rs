@@ -89,7 +89,28 @@ pub unsafe fn treeseq2treeseq(
 #[test]
 fn testit() {
     Python::attach(|py| {
-        let t = tskit::TableCollection::new(666.).unwrap();
-        let _ = unsafe { tables2treeseq(py, t).unwrap() };
+        let mut t = tskit::TableCollection::new(666.).unwrap();
+        let c = t
+            .add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)
+            .unwrap();
+        let p = t.add_node(0, 1.0, -1, -1).unwrap();
+        t.add_edge(0., 100., p, c).unwrap();
+        let pyt = unsafe { tables2treeseq(py, t).unwrap() };
+        let seqlen = pyt.getattr(py, "sequence_length").unwrap();
+        let seqlen: f64 = seqlen.extract(py).unwrap();
+        assert_eq!(seqlen, 666.);
+        let num_nodes: u64 = pyt.getattr(py, "num_nodes").unwrap().extract(py).unwrap();
+        assert_eq!(num_nodes, 2);
+        let num_edges: u64 = pyt.getattr(py, "num_edges").unwrap().extract(py).unwrap();
+        assert_eq!(num_edges, 1);
+        let edge = pyt
+            .getattr(py, "edge")
+            .unwrap()
+            .call(py, (0,), None)
+            .unwrap();
+        let left: f64 = edge.getattr(py, "left").unwrap().extract(py).unwrap();
+        let right: f64 = edge.getattr(py, "right").unwrap().extract(py).unwrap();
+        assert_eq!(left, 0.);
+        assert_eq!(right, 100.);
     })
 }
