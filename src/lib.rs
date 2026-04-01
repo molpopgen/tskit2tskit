@@ -7,9 +7,7 @@ unsafe fn read_tsk_ptr(
         // _tskit.TableCollection stores a *pointer* to a heap-allocated
         // tsk_table_collection_t immediately after PyObject_HEAD (offset 16).
         let offset = std::mem::size_of::<pyo3::ffi::PyObject>();
-        let ptr_field =
-            (py_obj as *mut u8).add(offset) as *mut *mut tskit::bindings::tsk_table_collection_t;
-        ptr_field
+        (py_obj as *mut u8).add(offset) as *mut *mut tskit::bindings::tsk_table_collection_t
     }
 }
 
