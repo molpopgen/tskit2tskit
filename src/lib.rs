@@ -1,11 +1,6 @@
 use pyo3::prelude::*;
 
-/// # Safety
-/// * `py_obj` must be a valid pointer to a `_tskit.TableCollection` Python object,
-///   whose layout has `tsk_table_collection_t` immediately after `PyObject_HEAD`.
-/// * Further, the `_tskit.TableCollection` must be based on a tsk_table_collection_t
-///   whose ABI is identical to that used to build tskit-rust
-pub unsafe fn read_tsk_ptr(
+unsafe fn read_tsk_ptr(
     py_obj: *mut pyo3::ffi::PyObject,
 ) -> *mut *mut tskit::bindings::tsk_table_collection_t {
     unsafe {
@@ -18,6 +13,19 @@ pub unsafe fn read_tsk_ptr(
     }
 }
 
+/// Convert a rust TableCollection into a Python TreeSequence, making
+/// zero extra copies!
+///
+/// # Errors
+///
+/// * An error will be returned if the input tables do not represent a valid
+///   TreeSequence.
+///   
+/// # Safety
+///
+/// * The `_tskit.TableCollection` must be based on a tsk_table_collection_t
+///   whose ABI is identical to that used to build tskit-rust
+///
 pub unsafe fn tables2treeseq(
     py: Python<'_>,
     rust_tables: tskit::TableCollection,
@@ -30,12 +38,23 @@ pub unsafe fn tables2treeseq(
         .getattr("TableCollection")?
         .call1((sequence_length,))?;
 
+    // Convert the rust tables into a raw pointer.
+    // We unwrap the Option here because a NULL pointer
+    // is a HARD error!
+    // NOTE: tskit-rust uses malloc for these pointers!
+    // (Otherwise nothing below would be valid.)
     let rust_tables_ptr = rust_tables.into_mut_ptr().unwrap();
+
     unsafe {
+        // 1. Get a pointer to the pointer to the Python-side
+        //    TableCollection
         let py_obj_ptr = py_ll_tc.as_ptr();
         let dest_ptr = read_tsk_ptr(py_obj_ptr);
+        // 2. Tear down the contents of the Python-side tables
         tskit::bindings::tsk_table_collection_free(*dest_ptr);
+        // 3. Deallocate the memory of the Python-side tables
         libc::free((*dest_ptr).cast::<libc::c_void>());
+        // 4. Rebind the pointer to what we got from rust!
         *dest_ptr = rust_tables_ptr.as_ptr();
     }
 
@@ -50,13 +69,22 @@ pub unsafe fn tables2treeseq(
     Ok(ts.unbind())
 }
 
+/// Convert a rust TreeSequence into a Python TreeSequence without
+/// making extra copies of the TableCollection.
+///
+/// # Safety
+///
+/// * The `_tskit.TableCollection` must be based on a tsk_table_collection_t
+///   whose ABI is identical to that used to build tskit-rust
 pub unsafe fn treeseq2treeseq(
     py: Python<'_>,
     rust_treeseq: tskit::TreeSequence,
 ) -> PyResult<Py<PyAny>> {
     let rust_tables = rust_treeseq.dump_tables().unwrap();
-    tables2treeseq(py, rust_tables)
+    unsafe { tables2treeseq(py, rust_tables) }
 }
+
+// NOTE: for tests to run, tskit-python must be installed!
 
 #[test]
 fn testit() {
