@@ -42,4 +42,8 @@ jobs:
         run: |
           # We need to make sure that tests link to the python debug runtime lib
           LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run -p 3.14d cargo test
+      - name: Build and run haploid_wright_fisher example
+        run: |
+          LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run cargo run --example haploid_wright_fisher 42 10 100 5 example.trees
+          rm -f example.trees
 
