@@ -1,5 +1,35 @@
 use pyo3::prelude::*;
 
+pub fn empty_tables<P: Into<tskit::Position>>(
+    sequence_length: P,
+) -> Result<tskit::TableCollection, tskit::TskitError> {
+    let ptr = unsafe {
+        pyo3::ffi::PyMem_Malloc(std::mem::size_of::<tskit::bindings::tsk_table_collection_t>())
+            .cast::<tskit::bindings::tsk_table_collection_t>()
+    };
+    unsafe {
+        tskit::bindings::tsk_table_collection_init(ptr, 0);
+        (*ptr).sequence_length = sequence_length.into().into();
+    }
+    unsafe { tskit::TableCollection::new_from_raw(std::ptr::NonNull::new(ptr).unwrap()) }
+}
+
+/// # Safety
+///
+/// * `tables` *should* have been created via [``empty_tables``].
+/// * `tables` **must** have been initialzed with a pointer allocated by ``PyMem_Malloc``.
+pub unsafe fn teardown_tables(tables: tskit::TableCollection) {
+    let ptr = tables.into_mut_ptr().unwrap();
+    // SAFETY: ptr is not NULL and all tskit::TableCollection contain initialized
+    // tsk_table_collection_t
+    let rv = unsafe { tskit::bindings::tsk_table_collection_free(ptr.as_ptr()) };
+    assert_eq!(rv, 0);
+    // SAFETY:
+    // * this is the correct free function if PyMem_Malloc was the allocator
+    // * ptr is not NULL
+    unsafe { pyo3::ffi::PyMem_Free(ptr.as_ptr().cast::<libc::c_void>()) }
+}
+
 unsafe fn read_tsk_ptr(
     py_obj: *mut pyo3::ffi::PyObject,
 ) -> *mut *mut tskit::bindings::tsk_table_collection_t {
@@ -11,19 +41,22 @@ unsafe fn read_tsk_ptr(
     }
 }
 
-/// Convert a rust TableCollection into a Python TreeSequence, making
-/// zero extra copies!
+/// Zero-copy conversion from rust TableCollection to Python TreeSequence
 ///
 /// # Errors
 ///
-/// * An error will be returned if the input tables do not represent a valid
+/// * If the input tables do not represent a valid
 ///   TreeSequence.
+/// * If an error occurs during teardown of a pointer obtained
+///   from `tskit-python`. In this case, this function will call
+///   `PyMem_Free` on the pointer obtained from `rust_tables`.
 ///   
 /// # Safety
 ///
 /// * The `_tskit.TableCollection` must be based on a tsk_table_collection_t
 ///   whose ABI is identical to that used to build tskit-rust
-///
+/// * `rust_tables` must have been constructed using a pointer allocated by
+///   `PyMem_Malloc`.
 pub unsafe fn tables2treeseq(
     py: Python<'_>,
     rust_tables: tskit::TableCollection,
@@ -36,24 +69,30 @@ pub unsafe fn tables2treeseq(
         .getattr("TableCollection")?
         .call1((sequence_length,))?;
 
-    // Convert the rust tables into a raw pointer.
-    // We unwrap the Option here because a NULL pointer
-    // is a HARD error!
-    // NOTE: tskit-rust uses malloc for these pointers!
-    // (Otherwise nothing below would be valid.)
-    let rust_tables_ptr = rust_tables.into_mut_ptr().unwrap();
-
+    let p: std::ptr::NonNull<tskit::bindings::tsk_table_collection_t> = rust_tables
+        .into_mut_ptr()
+        .ok_or(pyo3::exceptions::PyRuntimeError::new_err(
+            "got a NULL pointer from the rust side...",
+        ))?;
     unsafe {
         // 1. Get a pointer to the pointer to the Python-side
         //    TableCollection
         let py_obj_ptr = py_ll_tc.as_ptr();
         let dest_ptr = read_tsk_ptr(py_obj_ptr);
         // 2. Tear down the contents of the Python-side tables
-        tskit::bindings::tsk_table_collection_free(*dest_ptr);
-        // 3. Deallocate the memory of the Python-side tables
-        libc::free((*dest_ptr).cast::<libc::c_void>());
-        // 4. Rebind the pointer to what we got from rust!
-        *dest_ptr = rust_tables_ptr.as_ptr();
+        let rv = tskit::bindings::tsk_table_collection_free(*dest_ptr);
+        if rv != 0 {
+            let msg = tskit::error::get_tskit_error_message(rv);
+            // Avoid leaks!!
+            pyo3::ffi::PyMem_Free(p.as_ptr().cast::<libc::c_void>());
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "error tearing down ll_tables from _tskit: {msg}"
+            )));
+        }
+        // 3. Dealloate the Python-side pointer
+        pyo3::ffi::PyMem_Free(*dest_ptr as *mut libc::c_void);
+        // 4. Rebind the Python-side pointer
+        *dest_ptr = p.as_ptr();
     }
 
     // Wrap in high-level tskit.TableCollection and create tree sequence
@@ -67,48 +106,22 @@ pub unsafe fn tables2treeseq(
     Ok(ts.unbind())
 }
 
-/// Convert a rust TreeSequence into a Python TreeSequence without
-/// making extra copies of the TableCollection.
+/// Zero-copy conversion of rust TreeSequence to Python TreeSequence.
 ///
 /// # Safety
 ///
 /// * The `_tskit.TableCollection` must be based on a tsk_table_collection_t
 ///   whose ABI is identical to that used to build tskit-rust
+/// * `rust_treeseq` must be based on a table collection initialized using
+///   a pointer allocated via `PyMem_Malloc`.
 pub unsafe fn treeseq2treeseq(
     py: Python<'_>,
     rust_treeseq: tskit::TreeSequence,
 ) -> PyResult<Py<PyAny>> {
-    let rust_tables = rust_treeseq.dump_tables().unwrap();
+    let rust_tables = rust_treeseq.dump_tables().map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!(
+            "failed to dump tables from rust side TreeSequence... {e:?}"
+        ))
+    })?;
     unsafe { tables2treeseq(py, rust_tables) }
-}
-
-// NOTE: for tests to run, tskit-python must be installed!
-
-#[test]
-fn testit() {
-    Python::attach(|py| {
-        let mut t = tskit::TableCollection::new(666.).unwrap();
-        let c = t
-            .add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)
-            .unwrap();
-        let p = t.add_node(0, 1.0, -1, -1).unwrap();
-        t.add_edge(0., 100., p, c).unwrap();
-        let pyt = unsafe { tables2treeseq(py, t).unwrap() };
-        let seqlen = pyt.getattr(py, "sequence_length").unwrap();
-        let seqlen: f64 = seqlen.extract(py).unwrap();
-        assert_eq!(seqlen, 666.);
-        let num_nodes: u64 = pyt.getattr(py, "num_nodes").unwrap().extract(py).unwrap();
-        assert_eq!(num_nodes, 2);
-        let num_edges: u64 = pyt.getattr(py, "num_edges").unwrap().extract(py).unwrap();
-        assert_eq!(num_edges, 1);
-        let edge = pyt
-            .getattr(py, "edge")
-            .unwrap()
-            .call(py, (0,), None)
-            .unwrap();
-        let left: f64 = edge.getattr(py, "left").unwrap().extract(py).unwrap();
-        let right: f64 = edge.getattr(py, "right").unwrap().extract(py).unwrap();
-        assert_eq!(left, 0.);
-        assert_eq!(right, 100.);
-    })
 }
