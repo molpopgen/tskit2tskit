@@ -31,8 +31,20 @@ impl From<PyErr> for Error {
 }
 
 pub struct TableCollectionHolder {
-    tables: tskit::TableCollection,
-    pytables: Py<PyAny>,
+    tables: Option<tskit::TableCollection>,
+    pytables: Option<Py<PyAny>>,
+}
+
+impl Drop for TableCollectionHolder {
+    fn drop(&mut self) {
+        if self.tables.is_some() {
+            let t = self.tables.take().unwrap();
+            let _ = t.into_mut_ptr();
+        }
+        if self.pytables.is_some() {
+            self.pytables.take().unwrap();
+        }
+    }
 }
 
 impl TableCollectionHolder {
@@ -55,21 +67,28 @@ impl TableCollectionHolder {
         // The pointee has been initialized w/o error over in Python
         let tables =
             unsafe { tskit::TableCollection::new_from_raw(std::ptr::NonNull::new(*ptr).unwrap()) }?;
-        Ok(Self { tables, pytables })
+        Ok(Self {
+            tables: Some(tables),
+            pytables: Some(pytables),
+        })
     }
 
     pub fn as_rust(&self) -> &tskit::TableCollection {
-        &self.tables
+        self.tables.as_ref().unwrap()
     }
 
     pub fn as_mut_rust(&mut self) -> &mut tskit::TableCollection {
-        &mut self.tables
+        self.tables.as_mut().unwrap()
     }
 
     pub fn into_python_tables(self) -> Py<PyAny> {
-        let (tables, pytables) = (self.tables, self.pytables);
-        let _ = tables.into_mut_ptr();
-        pytables
+        let mut t = self;
+        let mut tables = None;
+        let mut pytables = None;
+        std::mem::swap(&mut t.tables, &mut tables);
+        std::mem::swap(&mut t.pytables, &mut pytables);
+        let _ = tables.unwrap().into_mut_ptr();
+        pytables.unwrap()
     }
 
     pub fn into_python_tree_sequence(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -209,4 +228,24 @@ pub unsafe fn treeseq2treeseq(
         ))
     })?;
     unsafe { tables2treeseq(py, rust_tables) }
+}
+
+#[test]
+fn demonstrate_memory_sharing() {
+    Python::attach(|py| {
+        let holder = TableCollectionHolder::new(py, 100.).unwrap();
+
+        // Use Python API to add a row
+        let pt = &holder.pytables;
+        pyo3::py_run!(py, pt, "pt.nodes.add_row(0, 0.0, -1, -1)");
+        assert_eq!(holder.as_rust().nodes().num_rows(), 1);
+    })
+}
+
+#[test]
+fn demonstrate_drop() {
+    Python::attach(|py| {
+        let holder = TableCollectionHolder::new(py, 100.).unwrap();
+        drop(holder)
+    })
 }
