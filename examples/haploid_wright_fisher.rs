@@ -29,6 +29,16 @@ impl From<PyErr> for Error {
     }
 }
 
+impl From<tskit2tskit::Error> for Error {
+    fn from(value: tskit2tskit::Error) -> Self {
+        match value {
+            tskit2tskit::Error::Python(msg) => Self::from(msg),
+            tskit2tskit::Error::TskitRust(msg) => Self::from(msg),
+            _ => panic!("unhandled error variant"),
+        }
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -59,12 +69,13 @@ fn rotate_edges(bookmark: &tskit::types::Bookmark, tables: &mut tskit::TableColl
 }
 
 fn simulate(
+    py: Python<'_>,
     seed: u64,
     popsize: usize,
     num_generations: i32,
     simplify_interval: i32,
     update_bookmark: bool,
-) -> Result<tskit::TreeSequence, Error> {
+) -> Result<tskit2tskit::TableCollectionHolder, Error> {
     if popsize == 0 {
         return Err(Error::Message("popsize must be > 0".to_string()));
     }
@@ -77,8 +88,9 @@ fn simulate(
 
     // Allocate a table collection backed by a pointer allocated from
     // PyMem_Malloc
-    let mut tables = tskit2tskit::empty_tables(1.0)?;
-
+    //let mut tables = tskit2tskit::empty_tables(1.0)?;
+    let mut tables_holder = tskit2tskit::TableCollectionHolder::new(py, 1.0)?;
+    let tables = tables_holder.as_mut_rust();
     // create parental nodes
     let mut parents_and_children = {
         let mut temp = vec![];
@@ -120,7 +132,7 @@ fn simulate(
         if birth_time % simplify_interval == 0 {
             tables.sort(&bookmark, tskit::TableSortOptions::default())?;
             if update_bookmark {
-                rotate_edges(&bookmark, &mut tables);
+                rotate_edges(&bookmark, tables);
             }
             if let Some(idmap) =
                 tables.simplify(children, tskit::SimplificationOptions::default(), true)?
@@ -137,10 +149,10 @@ fn simulate(
         std::mem::swap(&mut parents, &mut children);
     }
 
-    tables.build_index()?;
-    let treeseq = tables.tree_sequence(tskit::TreeSequenceFlags::default())?;
+    //tables.build_index()?;
+    //let treeseq = tables.tree_sequence(tskit::TreeSequenceFlags::default())?;
 
-    Ok(treeseq)
+    Ok(tables_holder)
 }
 
 #[derive(Clone, clap::Parser)]
@@ -167,6 +179,7 @@ fn main() -> Result<(), Error> {
     // to the "real" tskit-python so that analysis can take place!
     Python::attach(|py| {
         let rust_treeseq = simulate(
+            py,
             params.seed,
             params.popsize,
             params.num_generations,
@@ -176,7 +189,7 @@ fn main() -> Result<(), Error> {
         .unwrap();
         if let Some(filename) = params.treefile {
             // SAFETY: rust_treeseq was initialzed by tskit2tskit::empty_tables
-            let python_treeseq = unsafe { tskit2tskit::treeseq2treeseq(py, rust_treeseq) }.unwrap();
+            let python_treeseq = rust_treeseq.into_python_tree_sequence(py).unwrap();
             pyo3::py_run!(py, python_treeseq, "print(python_treeseq)");
             python_treeseq
                 .getattr(py, "dump")
