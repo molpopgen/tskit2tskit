@@ -46,4 +46,7 @@ jobs:
         run: |
           LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run cargo run --example haploid_wright_fisher 42 10 100 5 example.trees
           rm -f example.trees
+      - name: cargo doc
+        run: |
+          cargo doc --all-features
 
