@@ -90,7 +90,10 @@ fn simulate(
     // PyMem_Malloc
     //let mut tables = tskit2tskit::empty_tables(1.0)?;
     let mut tables_holder = tskit2tskit::TableCollectionHolder::new(py, 1.0)?;
-    let tables = tables_holder.as_mut_rust();
+    // SAFETY: the current tskit-python and tskit-rust have been checked
+    // for differences in ABI (layout) for tables and tree sequences.
+    // No differences were found.
+    let tables = unsafe { tables_holder.as_mut_rust() };
     // create parental nodes
     let mut parents_and_children = {
         let mut temp = vec![];

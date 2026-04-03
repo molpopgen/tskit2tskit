@@ -91,7 +91,13 @@ impl TableCollectionHolder {
     }
 
     /// Exclusive (mutable) reference to [`tskit::TableCollection`]
-    pub fn as_mut_rust(&mut self) -> &mut tskit::TableCollection {
+    ///
+    /// # Safety
+    ///
+    /// This function may lead to undefined behavior by allowing modification
+    /// of the tables when there is an ABI mismatch between `tskit-rust`
+    /// and `tskit-python`.
+    pub unsafe fn as_mut_rust(&mut self) -> &mut tskit::TableCollection {
         self.tables.as_mut().unwrap()
     }
 
