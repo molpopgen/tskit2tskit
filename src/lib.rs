@@ -81,7 +81,7 @@ impl TableCollectionHolder {
         self.tables.as_mut().unwrap()
     }
 
-    pub fn into_python_tables(self) -> Py<PyAny> {
+    fn into_ll_python_tables(self) -> Py<PyAny> {
         let mut t = self;
         let mut tables = None;
         let mut pytables = None;
@@ -91,15 +91,22 @@ impl TableCollectionHolder {
         pytables.unwrap()
     }
 
-    pub fn into_python_tree_sequence(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let pytables = self.into_python_tables();
+    pub fn into_python_tables(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let pytables = self.into_ll_python_tables();
         let tskit_mod = py.import("tskit")?;
         let kwargs = pyo3::types::PyDict::new(py);
         kwargs.set_item("ll_tables", &pytables)?;
-        let py_tc = tskit_mod
+        let tskit_py_tables = tskit_mod
             .getattr("TableCollection")?
-            .call((), Some(&kwargs))?;
-        let ts = py_tc.call_method0("tree_sequence")?;
+            .call((), Some(&kwargs))?
+            .unbind();
+        Ok(tskit_py_tables)
+    }
+
+    pub fn into_python_tree_sequence(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let pytables = self.into_python_tables(py)?;
+        let pytables = pytables.bind(py);
+        let ts = pytables.call_method0("tree_sequence")?;
         Ok(ts.unbind())
     }
 }
@@ -247,5 +254,20 @@ fn demonstrate_drop() {
     Python::attach(|py| {
         let holder = TableCollectionHolder::new(py, 100.).unwrap();
         drop(holder)
+    })
+}
+
+#[test]
+fn test_pytables_return_type() {
+    Python::attach(|py| {
+        let holder = TableCollectionHolder::new(py, 100.).unwrap();
+
+        // Use Python API to add a row
+        let pt = holder.into_python_tables(py).unwrap();
+        pyo3::py_run!(
+            py,
+            pt,
+            "import tskit; assert isinstance(pt, tskit.TableCollection)"
+        );
     })
 }
