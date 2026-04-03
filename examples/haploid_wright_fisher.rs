@@ -177,7 +177,7 @@ fn main() -> Result<(), Error> {
     // move on. But the concept is generally useful -- one can write
     // a Python package in rust and then transfer data (zero-copy!)
     // to the "real" tskit-python so that analysis can take place!
-    Python::attach(|py| {
+    Python::attach(|py| -> Result<(), Error> {
         let rust_treeseq = simulate(
             py,
             params.seed,
@@ -185,19 +185,13 @@ fn main() -> Result<(), Error> {
             params.num_generations,
             params.simplify_interval,
             params.bookmark,
-        )
-        .unwrap();
+        )?;
         if let Some(filename) = params.treefile {
             // SAFETY: rust_treeseq was initialzed by tskit2tskit::empty_tables
-            let python_treeseq = rust_treeseq.into_python_tree_sequence(py).unwrap();
+            let python_treeseq = rust_treeseq.into_python_tree_sequence(py)?;
             pyo3::py_run!(py, python_treeseq, "print(python_treeseq)");
-            python_treeseq
-                .getattr(py, "dump")
-                .unwrap()
-                .call1(py, (filename,))
-                .unwrap();
+            python_treeseq.getattr(py, "dump")?.call1(py, (filename,))?;
         }
-    });
-
-    Ok(())
+        Ok(())
+    })
 }
