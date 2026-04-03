@@ -1,5 +1,90 @@
 use pyo3::prelude::*;
 
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Error {
+    TskitRust(tskit::TskitError),
+    Python(PyErr),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Python(err) => write!(f, "{err:?}"),
+            Error::TskitRust(err) => write!(f, "{err:?}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<tskit::TskitError> for Error {
+    fn from(value: tskit::TskitError) -> Self {
+        Self::TskitRust(value)
+    }
+}
+
+impl From<PyErr> for Error {
+    fn from(value: PyErr) -> Self {
+        Self::Python(value)
+    }
+}
+
+pub struct TableCollectionHolder {
+    tables: tskit::TableCollection,
+    pytables: Py<PyAny>,
+}
+
+impl TableCollectionHolder {
+    pub fn new<'py, P: Into<tskit::Position>>(
+        py: Python<'py>,
+        sequence_length: P,
+    ) -> Result<Self, Error> {
+        let sequence_length: f64 = sequence_length.into().into();
+        let ll_tskit = py.import("_tskit")?;
+        let pytables = ll_tskit
+            .getattr("TableCollection")?
+            .call1((sequence_length,))?
+            .unbind();
+        // SAFETY: initialization happened just fine on the Python side
+        let ptr = unsafe { read_tsk_ptr(pytables.as_ptr()) };
+        assert!(!ptr.is_null());
+        // SAFETY: ptr is not NULL
+        assert!(!unsafe { *ptr }.is_null());
+        // SAFETY: nothing is NULL
+        // The pointee has been initialized w/o error over in Python
+        let tables =
+            unsafe { tskit::TableCollection::new_from_raw(std::ptr::NonNull::new(*ptr).unwrap()) }?;
+        Ok(Self { tables, pytables })
+    }
+
+    pub fn as_rust(&self) -> &tskit::TableCollection {
+        &self.tables
+    }
+
+    pub fn as_mut_rust(&mut self) -> &mut tskit::TableCollection {
+        &mut self.tables
+    }
+
+    pub fn into_python_tables(self) -> Py<PyAny> {
+        let (tables, pytables) = (self.tables, self.pytables);
+        let _ = tables.into_mut_ptr();
+        pytables
+    }
+
+    pub fn into_python_tree_sequence(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let pytables = self.into_python_tables();
+        let tskit_mod = py.import("tskit")?;
+        let kwargs = pyo3::types::PyDict::new(py);
+        kwargs.set_item("ll_tables", &pytables)?;
+        let py_tc = tskit_mod
+            .getattr("TableCollection")?
+            .call((), Some(&kwargs))?;
+        let ts = py_tc.call_method0("tree_sequence")?;
+        Ok(ts.unbind())
+    }
+}
+
 pub fn empty_tables<P: Into<tskit::Position>>(
     sequence_length: P,
 ) -> Result<tskit::TableCollection, tskit::TskitError> {
