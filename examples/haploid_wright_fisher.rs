@@ -149,9 +149,6 @@ fn simulate(
         std::mem::swap(&mut parents, &mut children);
     }
 
-    //tables.build_index()?;
-    //let treeseq = tables.tree_sequence(tskit::TreeSequenceFlags::default())?;
-
     Ok(tables_holder)
 }
 
@@ -187,7 +184,6 @@ fn main() -> Result<(), Error> {
             params.bookmark,
         )?;
         if let Some(filename) = params.treefile {
-            // SAFETY: rust_treeseq was initialzed by tskit2tskit::empty_tables
             let python_treeseq = rust_treeseq.into_python_tree_sequence(py)?;
             pyo3::py_run!(py, python_treeseq, "print(python_treeseq)");
             python_treeseq.getattr(py, "dump")?.call1(py, (filename,))?;
