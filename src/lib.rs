@@ -1,9 +1,17 @@
+//! Zero-copy data exchange of tskit types from rust to Python.
+
+#![deny(missing_docs)]
+#![deny(rustdoc::broken_intra_doc_links)]
+
 use pyo3::prelude::*;
 
 #[derive(Debug)]
 #[non_exhaustive]
+/// Error type
 pub enum Error {
+    /// Error from tskit (rust)
     TskitRust(tskit::TskitError),
+    /// Error from Python interpreter
     Python(PyErr),
 }
 
@@ -30,6 +38,9 @@ impl From<PyErr> for Error {
     }
 }
 
+/// Holds an instance of [`tskit::TableCollection`] and
+/// a Python `_tskit.TableCollection` (the so-called
+/// "low-level" implementation of a table collection.)
 pub struct TableCollectionHolder {
     tables: Option<tskit::TableCollection>,
     pytables: Option<Py<PyAny>>,
@@ -48,6 +59,7 @@ impl Drop for TableCollectionHolder {
 }
 
 impl TableCollectionHolder {
+    /// Constructor
     pub fn new<'py, P: Into<tskit::Position>>(
         py: Python<'py>,
         sequence_length: P,
@@ -73,10 +85,12 @@ impl TableCollectionHolder {
         })
     }
 
+    /// Shared reference to [`tskit::TableCollection`]
     pub fn as_rust(&self) -> &tskit::TableCollection {
         self.tables.as_ref().unwrap()
     }
 
+    /// Exclusive (mutable) reference to [`tskit::TableCollection`]
     pub fn as_mut_rust(&mut self) -> &mut tskit::TableCollection {
         self.tables.as_mut().unwrap()
     }
@@ -91,6 +105,7 @@ impl TableCollectionHolder {
         pytables.unwrap()
     }
 
+    /// Consume and return a *python* `tskit.TableCollection`.
     pub fn into_python_tables(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let pytables = self.into_ll_python_tables();
         let tskit_mod = py.import("tskit")?;
@@ -103,6 +118,7 @@ impl TableCollectionHolder {
         Ok(tskit_py_tables)
     }
 
+    /// Consume and return a *python* `tskit.TreeSequence`.
     pub fn into_python_tree_sequence(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let pytables = self.into_python_tables(py)?;
         let pytables = pytables.bind(py);
@@ -111,6 +127,8 @@ impl TableCollectionHolder {
     }
 }
 
+/// Create an empty [`tskit::TableCollection`] whose memory
+/// was allocated by a Python interpreter.
 pub fn empty_tables<P: Into<tskit::Position>>(
     sequence_length: P,
 ) -> Result<tskit::TableCollection, tskit::TskitError> {
