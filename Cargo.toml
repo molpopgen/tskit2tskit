@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 libc = "0.2.183"
 pyo3 = "0.28.3"
-tskit = { version = "0.15.0-alpha.4", features = ["derive", "bindings", "unsafe_init"] }
+tskit = { version = ">=0.15.0", features = ["derive", "bindings", "unsafe_init"] }
 
 [dev-dependencies]
 pyo3 = { version = "0.28.3", features = ["auto-initialize"] }
