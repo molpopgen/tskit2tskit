@@ -29,6 +29,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2.8.2
+      - uses: taiki-e/install-action@cargo-hack
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -41,11 +42,14 @@ jobs:
       - name: Run tests
         run: |
           # We need to make sure that tests link to the python debug runtime lib
-          LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run -p 3.14d cargo test
+          LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run -p 3.14d cargo hack test --feature-powerset --all-targets
       - name: Build and run haploid_wright_fisher example
         run: |
           LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run cargo run --example haploid_wright_fisher 42 10 100 5 example.trees
           rm -f example.trees
+      - name: Validate build for MSRV
+        run: |
+          cargo hack check --all-targets --feature-powerset --rust-version
       - name: cargo doc
         run: |
           cargo doc --all-features
