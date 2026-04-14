@@ -54,3 +54,37 @@ jobs:
         run: |
           cargo doc --all-features
 
+  clippy:
+    name: clippy!!
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        rust:
+          - stable
+    steps:
+      - uses: actions/checkout@v6.0.0
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2.8.2
+      - uses: taiki-e/install-action@cargo-hack
+      - name: update toolchain
+        run: rustup toolchain install
+      - name: clippy (all targets, feature powerset)
+        run: cargo hack clippy --all-targets --feature-powerset -- -D warnings
+
+  fmt:
+    name: rust fmt
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - run: |
+         rustfmt --check
