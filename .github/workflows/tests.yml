@@ -6,8 +6,8 @@ on:
 name: Python data round trips
 
 jobs:
-  test-metadata:
-    name: Test Python metadata round trips
+  tests:
+    name: Run tests
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
