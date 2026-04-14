@@ -34,6 +34,14 @@ fn test_simple_tables() {
 }
 
 #[test]
+fn test_teardown_tables() {
+    Python::attach(|_py| {
+        let rust_tables = tskit2tskit::empty_tables(666.).unwrap();
+        unsafe { tskit2tskit::teardown_tables(rust_tables) };
+    })
+}
+
+#[test]
 fn test_simplify_tables() {
     Python::attach(|py| {
         let mut rust_tables = tskit2tskit::empty_tables(666.).unwrap();
@@ -73,5 +81,57 @@ fn test_simplify_tables_via_treeseq() {
         let rust_tables = rust_ts.dump_tables().unwrap();
         // SAFETY: rust_tables is generated via empty_tables
         let _pyt = unsafe { tskit2tskit::tables2treeseq(py, rust_tables).unwrap() };
+    })
+}
+
+#[test]
+fn test_treeseq2treeseq() {
+    Python::attach(|py| {
+        let mut rust_tables = tskit2tskit::empty_tables(666.).unwrap();
+        let p = rust_tables.add_node(0, 1., -1, -1).unwrap();
+        let c0 = rust_tables
+            .add_node(tskit::NodeFlags::IS_SAMPLE, 0., -1, -1)
+            .unwrap();
+        let c1 = rust_tables
+            .add_node(tskit::NodeFlags::IS_SAMPLE, 0., -1, -1)
+            .unwrap();
+        let _ = rust_tables.add_edge(0., 666., p, c0).unwrap();
+        let _ = rust_tables.add_edge(0., 666., p, c1).unwrap();
+        rust_tables.full_sort(0).unwrap();
+        rust_tables.build_index().unwrap();
+        let rust_ts = rust_tables.tree_sequence(0).unwrap();
+        let _pyts = unsafe { tskit2tskit::treeseq2treeseq(py, rust_ts) }.unwrap();
+    })
+}
+
+#[test]
+fn test_mutable_holder() {
+    Python::attach(|py| {
+        let mut holder = tskit2tskit::TableCollectionHolder::new(py, 100.).unwrap();
+        // SAFETY: no ABI mismatch b/w rust and Python is possible b/c
+        // we never make further access of the Python tables
+        assert!(unsafe { holder.as_mut_rust() }
+            .add_node(0, 0., -1, -1)
+            .is_ok());
+    })
+}
+
+#[test]
+fn test_mutable_holder_into_tree_sequence() {
+    Python::attach(|py| {
+        let mut holder = tskit2tskit::TableCollectionHolder::new(py, 666.).unwrap();
+        let tables = unsafe { holder.as_mut_rust() };
+        let p = tables.add_node(0, 1., -1, -1).unwrap();
+        let c0 = tables
+            .add_node(tskit::NodeFlags::IS_SAMPLE, 0., -1, -1)
+            .unwrap();
+        let c1 = tables
+            .add_node(tskit::NodeFlags::IS_SAMPLE, 0., -1, -1)
+            .unwrap();
+        let _ = tables.add_edge(0., 666., p, c0).unwrap();
+        let _ = tables.add_edge(0., 666., p, c1).unwrap();
+        tables.full_sort(0).unwrap();
+        tables.build_index().unwrap();
+        let _pyts = holder.into_python_tree_sequence(py).unwrap();
     })
 }
