@@ -32,3 +32,24 @@ fn test_simple_tables() {
         assert_eq!(right, 100.);
     })
 }
+
+#[test]
+fn test_simplify_tables() {
+    Python::attach(|py| {
+        let mut rust_tables = tskit2tskit::empty_tables(666.).unwrap();
+        let p = rust_tables.add_node(0, 1., -1, -1).unwrap();
+        let c0 = rust_tables
+            .add_node(tskit::NodeFlags::IS_SAMPLE, 0., -1, -1)
+            .unwrap();
+        let c1 = rust_tables
+            .add_node(tskit::NodeFlags::IS_SAMPLE, 0., -1, -1)
+            .unwrap();
+        let _ = rust_tables.add_edge(0., 666., p, c0).unwrap();
+        let _ = rust_tables.add_edge(0., 666., p, c1).unwrap();
+        rust_tables.full_sort(0).unwrap();
+        rust_tables.build_index().unwrap();
+        rust_tables.simplify(&[c0, c1], 0, false).unwrap();
+        // SAFETY: rust_tables is generated via empty_tables
+        let _pyt = unsafe { tskit2tskit::tables2treeseq(py, rust_tables).unwrap() };
+    })
+}
