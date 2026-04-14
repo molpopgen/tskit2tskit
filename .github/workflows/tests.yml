@@ -38,7 +38,7 @@ jobs:
           python-version: "3.14d"
       - name: Install tskit-python
         run: |
-          uv pip install tskit
+          uv pip install "tskit>=1"
       - name: Run tests
         run: |
           # We need to make sure that tests link to the python debug runtime lib
