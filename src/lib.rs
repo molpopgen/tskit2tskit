@@ -1,6 +1,42 @@
 #![doc = include_str!("../README.md")]
 //! # Core functionality
 //! ## Working with an encapsulation of [`tskit::TableCollection`].
+//!
+//! [`TableCollectionHolder`] is an opaque wrapper around a rust
+//! [`tskit::TableCollection`] and a Python `tskit._tskit.TableCollection`.
+//! (the low-level wrapper around the C type `tsk_table_collection_t`).
+//! By means of some `unsafe` magic, these two objects *share* a pointer
+//! to the same `tsk_table_collection_t`.
+//!
+//! The high-level idea is that we can modify the tables in rust and then
+//! return them to Python, consuming the holder instance.
+//!
+//! By way of example:
+//!
+//! ```rust
+//! # use pyo3::prelude::*;
+//! // Run w/in a Python interpreter
+//! Python::attach(|py| -> PyResult<Py<PyAny>> {
+//!     let mut holder = tskit2tskit::TableCollectionHolder::new(py, 100.0).unwrap();
+//!     // SAFETY: the code below is safe if tskit-rust and tskit-python
+//!     // are built around the same layout for `tsk_table_collection_t`.
+//!     unsafe {
+//!         holder.with_mut_tables(|t| -> Result<(), tskit2tskit::Error> {
+//!             let parent = t.add_node(0, 1.0, -1, -1)?;
+//!             let c0 = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
+//!             let c1 = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
+//!             t.add_edge(0., 100., parent, c0)?;
+//!             t.add_edge(0., 100., parent, c1)?;
+//!             Ok(())
+//!         })?
+//!     };
+//!     // Returns Python tskit.TreeSequence
+//!     Ok(holder.into_python_tree_sequence(py)?)
+//! }).unwrap();
+//! ```
+//!
+//! The above code cleanly maps from [`tskit::TskitError`] to [`Error`] to [`PyErr`]
+//! by means of [`std::convert::From`].
 
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
