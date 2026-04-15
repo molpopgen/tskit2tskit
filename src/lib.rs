@@ -38,6 +38,15 @@ impl From<PyErr> for Error {
     }
 }
 
+impl From<Error> for PyErr {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::TskitRust(e) => pyo3::exceptions::PyRuntimeError::new_err(format!("{e:?}")),
+            Error::Python(e) => e,
+        }
+    }
+}
+
 /// Holds an instance of [`tskit::TableCollection`] and
 /// a Python `_tskit.TableCollection` (the so-called
 /// "low-level" implementation of a table collection.)
@@ -65,6 +74,12 @@ impl TableCollectionHolder {
         sequence_length: P,
     ) -> Result<Self, Error> {
         let sequence_length: f64 = sequence_length.into().into();
+        if !sequence_length.is_finite() || sequence_length <= 0.0 {
+            return Err(tskit::TskitError::ValueError {
+                got: sequence_length.to_string(),
+                expected: "sequence_length >= 0.0".to_string(),
+            })?;
+        }
         let ll_tskit = py.import("_tskit")?;
         let pytables = ll_tskit
             .getattr("TableCollection")?
@@ -112,7 +127,7 @@ impl TableCollectionHolder {
     }
 
     /// Consume and return a *python* `tskit.TableCollection`.
-    pub fn into_python_tables(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub fn into_python_tables(self, py: Python<'_>) -> Result<Py<PyAny>, Error> {
         let pytables = self.into_ll_python_tables();
         let tskit_mod = py.import("tskit")?;
         let kwargs = pyo3::types::PyDict::new(py);
@@ -125,7 +140,7 @@ impl TableCollectionHolder {
     }
 
     /// Consume and return a *python* `tskit.TreeSequence`.
-    pub fn into_python_tree_sequence(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub fn into_python_tree_sequence(self, py: Python<'_>) -> Result<Py<PyAny>, Error> {
         let pytables = self.into_python_tables(py)?;
         let pytables = pytables.bind(py);
         let ts = pytables.call_method0("tree_sequence")?;
@@ -195,7 +210,7 @@ unsafe fn read_tsk_ptr(
 pub unsafe fn tables2treeseq(
     py: Python<'_>,
     rust_tables: tskit::TableCollection,
-) -> PyResult<Py<PyAny>> {
+) -> Result<Py<PyAny>, Error> {
     let sequence_length: f64 = rust_tables.sequence_length().into();
 
     // Create an empty _tskit.TableCollection
@@ -220,9 +235,9 @@ pub unsafe fn tables2treeseq(
             let msg = tskit::error::get_tskit_error_message(rv);
             // Avoid leaks!!
             pyo3::ffi::PyMem_Free(p.as_ptr().cast::<libc::c_void>());
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+            Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "error tearing down ll_tables from _tskit: {msg}"
-            )));
+            )))?;
         }
         // 3. Dealloate the Python-side pointer
         pyo3::ffi::PyMem_Free(*dest_ptr as *mut libc::c_void);
@@ -252,12 +267,8 @@ pub unsafe fn tables2treeseq(
 pub unsafe fn treeseq2treeseq(
     py: Python<'_>,
     rust_treeseq: tskit::TreeSequence,
-) -> PyResult<Py<PyAny>> {
-    let rust_tables = rust_treeseq.dump_tables().map_err(|e| {
-        pyo3::exceptions::PyRuntimeError::new_err(format!(
-            "failed to dump tables from rust side TreeSequence... {e:?}"
-        ))
-    })?;
+) -> Result<Py<PyAny>, Error> {
+    let rust_tables = rust_treeseq.dump_tables()?;
     unsafe { tables2treeseq(py, rust_tables) }
 }
 
@@ -293,5 +304,29 @@ fn test_pytables_return_type() {
             pt,
             "import tskit; assert isinstance(pt, tskit.TableCollection)"
         );
+    })
+}
+
+#[test]
+fn test_err_tskit() {
+    let e: Error = tskit::TskitError::ErrorCode {
+        code: tskit::bindings::TSK_ERR_NULL_CHILD,
+    }
+    .into();
+    let _ = e.to_string();
+    let _: PyErr = e.into();
+}
+
+#[test]
+fn test_err_py() {
+    let e: Error = pyo3::exceptions::PyRuntimeError::new_err("boo").into();
+    println!("{e}");
+    let _: PyErr = e.into();
+}
+
+#[test]
+fn holder_invalid_seqlen() {
+    Python::attach(|py| {
+        assert!(TableCollectionHolder::new(py, -1.).is_err());
     })
 }
