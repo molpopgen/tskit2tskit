@@ -1,4 +1,4 @@
-//! Zero-copy data exchange of tskit types from rust to Python.
+#![doc = include_str!("../README.md")]
 
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
