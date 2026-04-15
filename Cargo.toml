@@ -6,11 +6,11 @@ rust-version = "1.88.0"
 
 [dependencies]
 libc = "0.2.183"
-pyo3 = "0.28.3"
+pyo3 = ">=0.28.3"
 tskit = { version = ">=0.15.0", features = ["derive", "bindings", "unsafe_init"] }
 
 [dev-dependencies]
-pyo3 = { version = "0.28.3", features = ["auto-initialize"] }
+pyo3 = { version = ">=0.28.3", features = ["auto-initialize"] }
 clap = { version = ">=4", features = ["derive"] }
 rand = "0.8.3"
 
