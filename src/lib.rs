@@ -1,4 +1,67 @@
 #![doc = include_str!("../README.md")]
+//! # Core functionality
+//! ## Working with pure [`tskit`] types.
+//!
+//! This approach gives access to the complete rust `tskit` API.
+//! We create a [`tskit::TableCollection`] backed by a pointer to
+//! [`tskit::bindings::tsk_table_collection_t`] allocated by `PyMem_Malloc`
+//! (the Python memory allocator).
+//!
+//! Here is an example, with full type annotation for clarity:
+//!
+//! ```rust
+//! use pyo3::prelude::*;
+//!
+//! // We must execute code in a Python interpreter
+//! Python::attach(|py| -> Result<Py<PyAny>, tskit2tskit::Error> {
+//!     // allocate a pointer and return initialized tables
+//!     let mut tables: tskit::TableCollection = tskit2tskit::empty_tables(100.0)?;
+//!
+//!     // We can modify the tables using the standard rust API
+//!     tables.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
+//!
+//!     // return a Python tskit.TreeSequence
+//!     // SAFETY: this is safe if the Python and rust
+//!     // interfaces share the same layout for tsk_table_collection_t
+//!     // The call to tables2treeseq ensures correct teardown of the input value.
+//!     unsafe { tskit2tskit::tables2treeseq(py, tables) }
+//! }).unwrap();
+//! ```
+//!
+//! The following example is contrived because we never return the rust object
+//! to Python and therefore never need a table collection with a pointer
+//! managed by the Python allocator.
+//! However, this example does show how to go from tables to tree sequence
+//! and back on the rust side and how to correctly tear down the tables.
+//! This example works because the Python-allocated pointer remains valid
+//! during the round-trip through the tree sequence.
+//!
+//! ```rust
+//! use pyo3::prelude::*;
+//!
+//! // We must execute code in a Python interpreter
+//! Python::attach(|py| -> Result<(), tskit2tskit::Error> {
+//!     // allocate a pointer and return initialized tables
+//!     let mut tables: tskit::TableCollection = tskit2tskit::empty_tables(100.0)?;
+//!
+//!     // We can modify the tables using the standard rust API
+//!     let child = tables.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
+//!     let parent = tables.add_node(0, 1.0, -1, -1)?;
+//!     tables.add_edge(0., 100., parent, child)?;
+//!
+//!     let ts = tables.tree_sequence(tskit::TreeSequenceFlags::BUILD_INDEXES)?;
+//!     assert!(!ts.tables().as_ptr().is_null());
+//!     let tables = ts.dump_tables()?;
+//!     assert!(!tables.as_ptr().is_null());
+//!
+//!     // tear down the tables using the correct methods to free memory
+//!     // SAFETY: tables were allocated via `empty_tables`.
+//!     unsafe { tskit2tskit::teardown_tables(tables) };
+//!     Ok(())
+//! }).unwrap();
+//! ```
+//!
+//! ## Working with an encapsulation of [`tskit::TableCollection`].
 
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
@@ -7,11 +70,13 @@ use pyo3::prelude::*;
 
 #[derive(Debug)]
 #[non_exhaustive]
-/// Error type
+/// Error type.
+///
+/// Convertible to [`pyo3::PyErr`] via [`std::convert::From`].
 pub enum Error {
-    /// Error from tskit (rust)
+    /// Error from tskit (rust).
     TskitRust(tskit::TskitError),
-    /// Error from Python interpreter
+    /// Error from Python interpreter.
     Python(PyErr),
 }
 
@@ -69,6 +134,16 @@ impl Drop for TableCollectionHolder {
 
 impl TableCollectionHolder {
     /// Constructor
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use pyo3::prelude::*;
+    /// # use tskit2tskit::TableCollectionHolder;
+    /// Python::attach(|py| {
+    ///     let _ = TableCollectionHolder::new(py, 100.0).unwrap();
+    /// });
+    /// ```
     pub fn new<'py, P: Into<tskit::Position>>(
         py: Python<'py>,
         sequence_length: P,
@@ -101,6 +176,16 @@ impl TableCollectionHolder {
     }
 
     /// Shared reference to [`tskit::TableCollection`]
+    ///
+    /// # Examples
+    /// ```rust
+    /// # use pyo3::prelude::*;
+    /// # use tskit2tskit::TableCollectionHolder;
+    /// Python::attach(|py| {
+    ///     let holder = TableCollectionHolder::new(py, 100.0).unwrap();
+    ///     let _: &tskit::TableCollection = holder.as_rust();
+    /// });
+    /// ```
     pub fn as_rust(&self) -> &tskit::TableCollection {
         self.tables.as_ref().unwrap()
     }
@@ -112,6 +197,20 @@ impl TableCollectionHolder {
     /// This function may lead to undefined behavior by allowing modification
     /// of the tables when there is an ABI mismatch between `tskit-rust`
     /// and `tskit-python`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use pyo3::prelude::*;
+    /// # use tskit2tskit::TableCollectionHolder;
+    /// Python::attach(|py| {
+    ///     let mut holder = TableCollectionHolder::new(py, 100.0).unwrap();
+    ///     // SAFETY: mutating the tables is safe if the rust and python side
+    ///     // use the same ABI.
+    ///     let tables: &mut tskit::TableCollection = unsafe { holder.as_mut_rust() };
+    ///     tables.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, 1).unwrap();
+    /// });
+    /// ```
     pub unsafe fn as_mut_rust(&mut self) -> &mut tskit::TableCollection {
         self.tables.as_mut().unwrap()
     }
@@ -127,6 +226,18 @@ impl TableCollectionHolder {
     }
 
     /// Consume and return a *python* `tskit.TableCollection`.
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use pyo3::prelude::*;
+    /// # use tskit2tskit::TableCollectionHolder;
+    /// Python::attach(|py| {
+    ///     let holder = TableCollectionHolder::new(py, 100.0).unwrap();
+    ///     let pytables = holder.into_python_tables(py).unwrap();
+    ///     pyo3::py_run!(py, pytables, "import tskit; assert isinstance(pytables,
+    ///     tskit.TableCollection)");
+    /// });
+    /// ```
     pub fn into_python_tables(self, py: Python<'_>) -> Result<Py<PyAny>, Error> {
         let pytables = self.into_ll_python_tables();
         let tskit_mod = py.import("tskit")?;
@@ -140,6 +251,18 @@ impl TableCollectionHolder {
     }
 
     /// Consume and return a *python* `tskit.TreeSequence`.
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use pyo3::prelude::*;
+    /// # use tskit2tskit::TableCollectionHolder;
+    /// Python::attach(|py| {
+    ///     let holder = TableCollectionHolder::new(py, 100.0).unwrap();
+    ///     let pytreeseq = holder.into_python_tree_sequence(py).unwrap();
+    ///     pyo3::py_run!(py, pytreeseq, "import tskit; assert isinstance(pytreeseq,
+    ///     tskit.TreeSequence)");
+    /// });
+    /// ```
     pub fn into_python_tree_sequence(self, py: Python<'_>) -> Result<Py<PyAny>, Error> {
         let pytables = self.into_python_tables(py)?;
         let pytables = pytables.bind(py);
@@ -150,6 +273,25 @@ impl TableCollectionHolder {
 
 /// Create an empty [`tskit::TableCollection`] whose memory
 /// was allocated by a Python interpreter.
+///
+/// In order to tear down the tables and avoid leaks and/or
+/// undefined behavior:
+///
+/// * The return value needs to be torn down and deallocated via
+///   [`teardown_tables`].
+/// * OR it may be converted to a Python-side tree sequence
+///   via [`tables2treeseq`]
+///
+/// # Examples
+///
+/// ```rust
+/// # use pyo3::prelude::*;
+/// Python::attach(|_| {
+///    let t = tskit2tskit::empty_tables(1e6).unwrap();
+///    // SAFETY: t was initialized with `empty_tables`.
+///    unsafe { tskit2tskit::teardown_tables(t) };
+/// })
+/// ```
 pub fn empty_tables<P: Into<tskit::Position>>(
     sequence_length: P,
 ) -> Result<tskit::TableCollection, tskit::TskitError> {
@@ -164,10 +306,16 @@ pub fn empty_tables<P: Into<tskit::Position>>(
     unsafe { tskit::TableCollection::new_from_raw(std::ptr::NonNull::new(ptr).unwrap()) }
 }
 
+/// Tear down and deallocate the pointer to a table collection.
+///
 /// # Safety
 ///
 /// * `tables` *should* have been created via [``empty_tables``].
 /// * `tables` **must** have been initialzed with a pointer allocated by ``PyMem_Malloc``.
+///
+/// # Examples
+///
+/// See [`empty_tables`] for examples.
 pub unsafe fn teardown_tables(tables: tskit::TableCollection) {
     let ptr = tables.into_mut_ptr().unwrap();
     // SAFETY: ptr is not NULL and all tskit::TableCollection contain initialized
@@ -207,6 +355,13 @@ unsafe fn read_tsk_ptr(
 ///   whose ABI is identical to that used to build tskit-rust
 /// * `rust_tables` must have been constructed using a pointer allocated by
 ///   `PyMem_Malloc`.
+///
+/// # Note
+///
+/// * It is undefined behavior to pass tables obtained via the
+///   return value of [`tskit::TreeSequence::simplify`] to this function.
+///   The underlying pointer to those tables has **not** been allocated
+///   by the Python memory allocator!
 pub unsafe fn tables2treeseq(
     py: Python<'_>,
     rust_tables: tskit::TableCollection,
@@ -239,7 +394,7 @@ pub unsafe fn tables2treeseq(
                 "error tearing down ll_tables from _tskit: {msg}"
             )))?;
         }
-        // 3. Dealloate the Python-side pointer
+        // 3. Deallocate the Python-side pointer
         pyo3::ffi::PyMem_Free(*dest_ptr as *mut libc::c_void);
         // 4. Rebind the Python-side pointer
         *dest_ptr = p.as_ptr();
@@ -260,10 +415,19 @@ pub unsafe fn tables2treeseq(
 ///
 /// # Safety
 ///
-/// * The `_tskit.TableCollection` must be based on a tsk_table_collection_t
+/// * The Python type `_tskit.TableCollection` must be based on a tsk_table_collection_t
 ///   whose ABI is identical to that used to build tskit-rust
 /// * `rust_treeseq` must be based on a table collection initialized using
 ///   a pointer allocated via `PyMem_Malloc`.
+///
+/// # Notes
+///
+/// * The return value of [`tskit::TreeSequence::simplify`] is a *new*
+///   [`tskit::TreeSequence`] whose tables pointer has been allocated by
+///   `malloc` (the C memory allocator). It is undefined behavior (UB)
+///   to pass such a tree sequence to this function!
+/// * It is also UB to dump the tables from such a tree sequence and send
+///   them to [`tables2treeseq`].
 pub unsafe fn treeseq2treeseq(
     py: Python<'_>,
     rust_treeseq: tskit::TreeSequence,
