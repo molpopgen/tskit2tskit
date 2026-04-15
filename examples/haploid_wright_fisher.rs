@@ -5,10 +5,10 @@
 
 use clap::Parser;
 use pyo3::prelude::*;
-use rand::SeedableRng;
 #[cfg(test)]
 use rand::distributions::Distribution;
 use rand::prelude::*;
+use rand::SeedableRng;
 
 #[derive(Debug)]
 enum Error {
@@ -69,13 +69,13 @@ fn rotate_edges(bookmark: &tskit::types::Bookmark, tables: &mut tskit::TableColl
 }
 
 fn simulate(
-    py: Python<'_>,
     seed: u64,
     popsize: usize,
     num_generations: i32,
     simplify_interval: i32,
     update_bookmark: bool,
-) -> Result<tskit2tskit::TableCollectionHolder, Error> {
+    tables: &mut tskit::TableCollection,
+) -> Result<(), Error> {
     if popsize == 0 {
         return Err(Error::Message("popsize must be > 0".to_string()));
     }
@@ -89,11 +89,9 @@ fn simulate(
     // Allocate a table collection backed by a pointer allocated from
     // PyMem_Malloc
     //let mut tables = tskit2tskit::empty_tables(1.0)?;
-    let mut tables_holder = tskit2tskit::TableCollectionHolder::new(py, 1.0)?;
     // SAFETY: the current tskit-python and tskit-rust have been checked
     // for differences in ABI (layout) for tables and tree sequences.
     // No differences were found.
-    let tables = unsafe { tables_holder.as_mut_rust() };
     // create parental nodes
     let mut parents_and_children = {
         let mut temp = vec![];
@@ -152,7 +150,7 @@ fn simulate(
         std::mem::swap(&mut parents, &mut children);
     }
 
-    Ok(tables_holder)
+    Ok(())
 }
 
 #[derive(Clone, clap::Parser)]
@@ -178,16 +176,27 @@ fn main() -> Result<(), Error> {
     // a Python package in rust and then transfer data (zero-copy!)
     // to the "real" tskit-python so that analysis can take place!
     Python::attach(|py| -> Result<(), Error> {
-        let rust_treeseq = simulate(
-            py,
-            params.seed,
-            params.popsize,
-            params.num_generations,
-            params.simplify_interval,
-            params.bookmark,
-        )?;
+        let mut holder = tskit2tskit::TableCollectionHolder::new(py, 1.0)?;
+
+        // SAFETY: the following call is safe if tskit-rust and tskit-python
+        // have the same ABI for tsk_table_collection_t.
+        // Further, we must know that the layout of the low-level _tskit.TableCollection
+        // is as described in the README of this crate.
+        // At the time of this writing, these requirements are upheld.
+        unsafe {
+            holder.with_mut_tables(|tables| {
+                simulate(
+                    params.seed,
+                    params.popsize,
+                    params.num_generations,
+                    params.simplify_interval,
+                    params.bookmark,
+                    tables,
+                )
+            })
+        }?;
         if let Some(filename) = params.treefile {
-            let python_treeseq = rust_treeseq.into_python_tree_sequence(py)?;
+            let python_treeseq = holder.into_python_tree_sequence(py)?;
             pyo3::py_run!(py, python_treeseq, "print(python_treeseq)");
             python_treeseq.getattr(py, "dump")?.call1(py, (filename,))?;
         }
