@@ -176,7 +176,7 @@ fn main() -> Result<(), Error> {
     // a Python package in rust and then transfer data (zero-copy!)
     // to the "real" tskit-python so that analysis can take place!
     Python::attach(|py| -> Result<(), Error> {
-        let mut holder = tskit2tskit::TableCollectionHolder::new(py, 1.0)?;
+        let mut holder = tskit2tskit::SharedTableCollection::new(py, 1.0)?;
 
         // SAFETY: the following call is safe if tskit-rust and tskit-python
         // have the same ABI for tsk_table_collection_t.

@@ -11,7 +11,7 @@ mod maketrees {
     use pyo3::prelude::*;
     #[pyfunction]
     fn maketrees(py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let mut holder = tskit2tskit::TableCollectionHolder::new(py, 100.0).unwrap();
+        let mut holder = tskit2tskit::SharedTableCollection::new(py, 100.0).unwrap();
         // Release the gil to work only on the rust side of the data,
         // potentially allowing other Python threads to run.
         py.detach(|| -> Result<(), PyErr> {
