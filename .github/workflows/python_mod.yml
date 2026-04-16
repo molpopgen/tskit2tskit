@@ -1,0 +1,43 @@
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+name: Test Python example module
+
+jobs:
+  python-example-module:
+    name: Build and run Python example module
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+        rust:
+          - stable
+        python: [ "3.14d" ]
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v6.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2.8.2
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          activate-environment: true
+          version: "latest"
+          python-version: ${{ matrix.python }}
+      - name: Install package
+        run: |
+          uv sync --project=python_example/maketrees/tests
+      - name: Run Python-side tests
+        run: |
+          LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run --project=python_example/maketrees/tests python -m pytest python_example/maketrees/tests

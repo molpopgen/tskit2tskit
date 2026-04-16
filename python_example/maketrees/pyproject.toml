@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.13,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "maketrees"
+requires-python = ">=3.11, <3.15"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+dependencies = [
+    "tskit >= 1.0.0"
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "maketrees._maketrees"
