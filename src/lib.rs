@@ -2,7 +2,7 @@
 //! # Core functionality
 //! ## Working with an encapsulation of [`tskit::TableCollection`].
 //!
-//! [`TableCollectionHolder`] is an opaque wrapper around a rust
+//! [`SharedTableCollection`] is an opaque wrapper around a rust
 //! [`tskit::TableCollection`] and a Python `tskit._tskit.TableCollection`.
 //! (the low-level wrapper around the C type `tsk_table_collection_t`).
 //! By means of some `unsafe` magic, these two objects *share* a pointer
@@ -71,12 +71,12 @@ impl From<Error> for PyErr {
 /// Holds an instance of [`tskit::TableCollection`] and
 /// a Python `_tskit.TableCollection` (the so-called
 /// "low-level" implementation of a table collection.)
-pub struct TableCollectionHolder {
+pub struct SharedTableCollection {
     tables: Option<tskit::TableCollection>,
     pytables: Option<Py<PyAny>>,
 }
 
-impl Drop for TableCollectionHolder {
+impl Drop for SharedTableCollection {
     fn drop(&mut self) {
         if self.tables.is_some() {
             let t = self.tables.take().unwrap();
@@ -88,16 +88,16 @@ impl Drop for TableCollectionHolder {
     }
 }
 
-impl TableCollectionHolder {
+impl SharedTableCollection {
     /// Constructor
     ///
     /// # Examples
     ///
     /// ```rust
     /// # use pyo3::prelude::*;
-    /// # use tskit2tskit::TableCollectionHolder;
+    /// # use tskit2tskit::SharedTableCollection;
     /// Python::attach(|py| {
-    ///     let _ = TableCollectionHolder::new(py, 100.0).unwrap();
+    ///     let _ = SharedTableCollection::new(py, 100.0).unwrap();
     /// });
     /// ```
     pub fn new<'py, P: Into<tskit::Position>>(
@@ -151,7 +151,7 @@ impl TableCollectionHolder {
     /// ```rust
     /// # use pyo3::prelude::*;
     /// Python::attach(|py| {
-    ///     let holder = tskit2tskit::TableCollectionHolder::new(py, 100.).unwrap();
+    ///     let holder = tskit2tskit::SharedTableCollection::new(py, 100.).unwrap();
     ///     // Using a closure
     ///     let seqlen = unsafe {holder.with_tables(|t| t.sequence_length())};
     ///     assert_eq!(seqlen, 100.);
@@ -179,7 +179,7 @@ impl TableCollectionHolder {
     /// ```rust
     /// # use pyo3::prelude::*;
     /// Python::attach(|py| {
-    ///     let mut holder = tskit2tskit::TableCollectionHolder::new(py, 100.).unwrap();
+    ///     let mut holder = tskit2tskit::SharedTableCollection::new(py, 100.).unwrap();
     ///     unsafe { holder.with_mut_tables(|t| {
     ///         t.add_node(0, 0.0, -1, -1).unwrap();
     ///     })}
@@ -208,9 +208,9 @@ impl TableCollectionHolder {
     ///
     /// ```rust
     /// # use pyo3::prelude::*;
-    /// # use tskit2tskit::TableCollectionHolder;
+    /// # use tskit2tskit::SharedTableCollection;
     /// Python::attach(|py| {
-    ///     let holder = TableCollectionHolder::new(py, 100.0).unwrap();
+    ///     let holder = SharedTableCollection::new(py, 100.0).unwrap();
     ///     let pytables = holder.into_python_tables(py).unwrap();
     ///     pyo3::py_run!(py, pytables, "import tskit; assert isinstance(pytables,
     ///     tskit.TableCollection)");
@@ -233,9 +233,9 @@ impl TableCollectionHolder {
     ///
     /// ```rust
     /// # use pyo3::prelude::*;
-    /// # use tskit2tskit::TableCollectionHolder;
+    /// # use tskit2tskit::SharedTableCollection;
     /// Python::attach(|py| {
-    ///     let holder = TableCollectionHolder::new(py, 100.0).unwrap();
+    ///     let holder = SharedTableCollection::new(py, 100.0).unwrap();
     ///     let pytreeseq = holder.into_python_tree_sequence(py).unwrap();
     ///     pyo3::py_run!(py, pytreeseq, "import tskit; assert isinstance(pytreeseq,
     ///     tskit.TreeSequence)");
@@ -263,7 +263,7 @@ unsafe fn read_tsk_ptr(
 #[test]
 fn demonstrate_memory_sharing() {
     Python::attach(|py| {
-        let holder = TableCollectionHolder::new(py, 100.).unwrap();
+        let holder = SharedTableCollection::new(py, 100.).unwrap();
 
         // Use Python API to add a row
         let pt = &holder.pytables;
@@ -275,7 +275,7 @@ fn demonstrate_memory_sharing() {
 #[test]
 fn demonstrate_drop() {
     Python::attach(|py| {
-        let holder = TableCollectionHolder::new(py, 100.).unwrap();
+        let holder = SharedTableCollection::new(py, 100.).unwrap();
         drop(holder)
     })
 }
@@ -283,7 +283,7 @@ fn demonstrate_drop() {
 #[test]
 fn test_pytables_return_type() {
     Python::attach(|py| {
-        let holder = TableCollectionHolder::new(py, 100.).unwrap();
+        let holder = SharedTableCollection::new(py, 100.).unwrap();
 
         // Use Python API to add a row
         let pt = holder.into_python_tables(py).unwrap();
@@ -315,14 +315,14 @@ fn test_err_py() {
 #[test]
 fn holder_invalid_seqlen() {
     Python::attach(|py| {
-        assert!(TableCollectionHolder::new(py, -1.).is_err());
+        assert!(SharedTableCollection::new(py, -1.).is_err());
     })
 }
 
 #[test]
 fn closure_capture_mut() {
     Python::attach(|py| {
-        let mut holder = TableCollectionHolder::new(py, 10.).unwrap();
+        let mut holder = SharedTableCollection::new(py, 10.).unwrap();
         let nodes = unsafe {
             holder.with_mut_tables(|t| {
                 let mut nodes = vec![];
@@ -345,7 +345,7 @@ fn closure_capture_mut_thru_fn() {
         nodes
     }
     Python::attach(|py| {
-        let mut holder = TableCollectionHolder::new(py, 10.).unwrap();
+        let mut holder = SharedTableCollection::new(py, 10.).unwrap();
         let nodes = unsafe { holder.with_mut_tables(add_node) };
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0], 0);
@@ -355,7 +355,7 @@ fn closure_capture_mut_thru_fn() {
 #[test]
 fn mutable_closure_capture_mut() {
     Python::attach(|py| {
-        let mut holder = TableCollectionHolder::new(py, 10.).unwrap();
+        let mut holder = SharedTableCollection::new(py, 10.).unwrap();
         let mut nodes = vec![];
         unsafe {
             holder.with_mut_tables(|t| {
@@ -371,7 +371,7 @@ fn mutable_closure_capture_mut() {
 #[test]
 fn closure_shared_ref() {
     Python::attach(|py| {
-        let holder = TableCollectionHolder::new(py, 100.).unwrap();
+        let holder = SharedTableCollection::new(py, 100.).unwrap();
         let seqlen = unsafe { holder.with_tables(|t| t.sequence_length()) };
         assert_eq!(seqlen, 100.);
         let seqlen = unsafe { holder.with_tables(tskit::TableCollection::sequence_length) };
@@ -382,7 +382,7 @@ fn closure_shared_ref() {
 #[test]
 fn closure_returning_error() {
     Python::attach(|py| {
-        let mut holder = TableCollectionHolder::new(py, 1.0).unwrap();
+        let mut holder = SharedTableCollection::new(py, 1.0).unwrap();
         unsafe {
             holder.with_mut_tables(|t| -> Result<tskit::NodeId, Error> {
                 // map tskit error type to that of this crate
