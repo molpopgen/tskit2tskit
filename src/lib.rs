@@ -13,28 +13,9 @@
 //!
 //! By way of example:
 //!
-//! ```rust
-//! # use pyo3::prelude::*;
-//! // Run w/in a Python interpreter
-//! Python::attach(|py| -> PyResult<Py<PyAny>> {
-//!     let mut holder = tskit2tskit::TableCollectionHolder::new(py, 100.0).unwrap();
-//!     // SAFETY: the code below is safe if tskit-rust and tskit-python
-//!     // are built around the same layout for `tsk_table_collection_t`.
-//!     unsafe {
-//!         holder.with_mut_tables(|t| -> Result<(), tskit2tskit::Error> {
-//!             let parent = t.add_node(0, 1.0, -1, -1)?;
-//!             let c0 = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
-//!             let c1 = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
-//!             t.add_edge(0., 100., parent, c0)?;
-//!             t.add_edge(0., 100., parent, c1)?;
-//!             Ok(())
-//!         })?
-//!     };
-//!     // Returns Python tskit.TreeSequence
-//!     Ok(holder.into_python_tree_sequence(py)?)
-//! }).unwrap();
-//! ```
-//!
+//!```rust
+#![doc = include_str!("../python_example/maketrees/src/lib.rs")]
+//!```
 //! The above code cleanly maps from [`tskit::TskitError`] to [`Error`] to [`PyErr`]
 //! by means of [`std::convert::From`].
 
