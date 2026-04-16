@@ -4,11 +4,13 @@
 // why this example is interesting.
 
 use clap::Parser;
-use pyo3::prelude::*;
-#[cfg(test)]
 use rand::distributions::Distribution;
-use rand::prelude::*;
 use rand::SeedableRng;
+
+// NOTE: using the re-exports helps
+// prevent awkward run-time/ABI issues.
+use tskit2tskit::pyo3::prelude::*;
+use tskit2tskit::tskit;
 
 #[derive(Debug)]
 enum Error {

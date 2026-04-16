@@ -22,6 +22,9 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+pub use pyo3;
+pub use tskit;
+
 use pyo3::prelude::*;
 
 #[derive(Debug)]
