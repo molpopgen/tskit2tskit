@@ -3,7 +3,7 @@ on:
     branches: [main]
   pull_request:
 
-name: Test Python example module
+name: Python tests
 
 jobs:
   python-example-module:
