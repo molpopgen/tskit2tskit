@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "tskit2tskit"
-version = "0.1.0"
+version = "0.1.0-alpha.0"
 dependencies = [
  "libc",
  "pyo3",

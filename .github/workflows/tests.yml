@@ -3,7 +3,7 @@ on:
     branches: [main, dev]
   pull_request:
 
-name: Python data round trips
+name: Tests
 
 jobs:
   tests:
@@ -57,6 +57,9 @@ jobs:
       - name: cargo doc
         run: |
           cargo doc --all-features
+      - name: test packaging
+        run: |
+          cargo publish --dry-run
 
   clippy:
     name: clippy!!

@@ -11,4 +11,4 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = "0.28.3"
 tskit = "0.15.0"
-tskit2tskit = { version = "*", path = "../.."}
+tskit2tskit = { version = "0.1.0-alpha.0", path = "../.."}

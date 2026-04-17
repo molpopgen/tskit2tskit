@@ -1,8 +1,12 @@
 [package]
 name = "tskit2tskit"
-version = "0.1.0"
+version = "0.1.0-alpha.0"
 edition = "2021"
 rust-version = "1.88.0"
+description = "Data exchange between tskit (rust) and tskit (python)"
+license = "MIT"
+homepage = "https://github.com/molpopgen/tskit2tskit"
+repository = "https://github.com/molpopgen/tskit2tskit"
 
 [dependencies]
 libc = "0.2.183"
