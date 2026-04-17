@@ -11,7 +11,7 @@ This crate facilitates data sharing betweeen [tskit-rust](https://docs.rs/tskit)
 
 The implementation of this crate is based on understanding the internals of both `tskit-python` and `tskit-c`.
 This crate relies on the C-side definition of the **python** `TableCollection` type!
-We specifically rely on the fact that the pointer `tskit-c` `TableCollection` type immediately follows the python object head pointer.
+We specifically rely on the fact that the pointer to the `tskit-c` `TableCollection` type immediately follows the python object head pointer.
 The relevant file in `tskit-python` is `_tskitmodule.c`, which contains the following:
 
 ```c
@@ -59,12 +59,27 @@ We expect developers of downstream tools to understand how to install debug vers
 ([`uv`](https://docs.astral.sh/uv/) is one of many methods for installing debug versions of the Python interpreter but you may experience linkage issues at runtime.)
 The reason for this suggestion is that certain types of memory errors can only be reliably caught using the debug interpreter.
 
+## Alternative approaches
+
+In general, it is far simpler and far more memory safe to to all work using the rust API, dump tables (or a tree sequence) to a "`.trees`" file, and then load that file for downstream work in `tskit-python`.
+In reality, the primary (and perhaps *only*?) use cases for this crate are:
+
+* To avoid the additional I/O entailed by data exchange through files.
+* To provide a single "product" (such as a Python package) that enables a complete work flow.
+
+## The (current) reality of the lack of memory safety.
+
+It is technically correct that this crate relies on `unsafe` memory operations.
+However, the reality on the ground is that the `tskit-c` type `tsk_table_collection_t` has been stable for a long time now and any changes to that type would break a LOT of peoples' projects.
+It is thus *reasonable* to claim that the memory safety issues that this crate needs to worry about are *unlikely* to be an issue.
+(And now that we have written the previous sentence, a layout change to that `struct` is all but guaranteed! ;) ).
+
 # Core functionality
 
 ## Working with an encapsulation of `tskit::TableCollection`.
 
 `SharedTableCollection` is an opaque wrapper around a rust
-`tskit::TableCollection` and a Python `tskit._tskit.TableCollection`.
+`tskit::TableCollection` and a Python `tskit._tskit.TableCollection` 
 (the low-level wrapper around the C type `tsk_table_collection_t`).
 By means of some `unsafe` magic, these two objects *share* a pointer
 to the same `tsk_table_collection_t`.
