@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
@@ -195,6 +194,7 @@ impl SharedTableCollection {
     ///     let pytables = holder.into_python_tables(py).unwrap();
     ///     pyo3::py_run!(py, pytables, "import tskit; assert isinstance(pytables,
     ///     tskit.TableCollection)");
+    ///     pyo3::py_run!(py, pytables, "assert pytables.sequence_length == 100.0");
     /// });
     /// ```
     pub fn into_python_tables(self, py: Python<'_>) -> Result<Py<PyAny>, Error> {
@@ -220,6 +220,11 @@ impl SharedTableCollection {
     ///     let pytreeseq = holder.into_python_tree_sequence(py).unwrap();
     ///     pyo3::py_run!(py, pytreeseq, "import tskit; assert isinstance(pytreeseq,
     ///     tskit.TreeSequence)");
+    ///     pyo3::py_run!(py, pytreeseq, "assert pytreeseq.sequence_length == 100.0");
+    ///     # pyo3::py_run!(py, pytreeseq, "assert pytreeseq.num_nodes == 0");
+    ///     # pyo3::py_run!(py, pytreeseq, "assert pytreeseq.num_edges == 0");
+    ///     # pyo3::py_run!(py, pytreeseq, "assert pytreeseq.num_sites == 0");
+    ///     # pyo3::py_run!(py, pytreeseq, "assert pytreeseq.num_mutations == 0");
     /// });
     /// ```
     pub fn into_python_tree_sequence(self, py: Python<'_>) -> Result<Py<PyAny>, Error> {
