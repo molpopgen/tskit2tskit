@@ -64,4 +64,10 @@ mod maketrees {
         };
         Ok(holder.into_python_tables(py)?)
     }
+
+    #[pyfunction]
+    fn raise_error(py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let holder = tskit2tskit::SharedTableCollection::new(py, f64::NAN)?;
+        Ok(holder.into_python_tables(py)?)
+    }
 }

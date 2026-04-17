@@ -1,6 +1,7 @@
 import tskit
 
 from ._maketrees import maketrees
+from ._maketrees import raise_error
 
 
 def make_treeseq_with_metadata() -> tskit.TreeSequence:
