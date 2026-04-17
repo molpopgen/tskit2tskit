@@ -66,6 +66,9 @@ In reality, the primary (and perhaps *only*?) use cases for this crate are:
 
 * To avoid the additional I/O entailed by data exchange through files.
 * To provide a single "product" (such as a Python package) that enables a complete work flow.
+  This is desirable in cases where the rust side generates tables with metadata and wants to
+  define a validated metadata schema, which is best done using `tskit-python`.
+  See [here](https://tskit.dev/tskit/docs/stable/metadata.html) for more about metadata and schema.
 
 ## The (current) reality of the lack of memory safety.
 
@@ -73,6 +76,22 @@ It is technically correct that this crate relies on `unsafe` memory operations.
 However, the reality on the ground is that the `tskit-c` type `tsk_table_collection_t` has been stable for a long time now and any changes to that type would break a LOT of peoples' projects.
 It is thus *reasonable* to claim that the memory safety issues that this crate needs to worry about are *unlikely* to be an issue.
 (And now that we have written the previous sentence, a layout change to that `struct` is all but guaranteed! ;) ).
+
+## Rationale for some design decisions
+
+It is also possible that our marking of certain functions `unsafe` is overly strict!
+The rationale for our choice is as follows.
+Fundamentally, access to tables in rust requires the conversion of a *pointer* to a `&` or `& mut`.
+These operations are safe if the criteria [here](https://doc.rust-lang.org/std/ptr/index.html#pointer-to-reference-conversion) are met.
+The following statement from that list is the devilish one:
+
+> * The pointer must point to a valid value of type T.
+
+When dealing solely with a rust `TableCollection`, and not using any `unsafe` API, we know that this is true because the rust API takes great pains to make sure of this.
+The problem for this crate is the Python types are based on a definition of `tsk_table_collection_t` that resides in the compiled library backing `tskit-python`.
+We *cannot* know at *compile time* if the layout of that type in `tskit-rust` is the same!
+As a result, we can always take a reference to a `tskit::TableCollection` but the undefined behavior may only occur when that reference is used.
+Thus, we consider any block of code making use of a reference obtained by this crate as `unsafe`.
 
 # Core functionality
 
