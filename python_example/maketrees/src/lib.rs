@@ -1,5 +1,11 @@
 use pyo3::prelude::*;
 
+#[derive(serde::Serialize, serde::Deserialize, tskit::metadata::MutationMetadata)]
+#[serializer("serde_json")]
+struct MutationMetadata {
+    data: String,
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 // The setup is designed for a mixed rust/python
@@ -34,5 +40,28 @@ mod maketrees {
         // Returns Python tskit.TreeSequence
         // Again, error types will propagate into PyErr as needed.
         Ok(holder.into_python_tree_sequence(py)?)
+    }
+
+    #[pyfunction]
+    fn _make_tables_with_metadata(py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let mut holder = tskit2tskit::SharedTableCollection::new(py, 100.0).unwrap();
+        unsafe {
+            holder.with_mut_tables(|t| -> Result<(), tskit2tskit::Error> {
+                let n = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
+                let s = t.add_site(10.0, Some("A".as_bytes()))?;
+                let _ = t.add_mutation_with_metadata(
+                    s,
+                    n,
+                    -1,
+                    0.0,
+                    Some("G".as_bytes()),
+                    &super::MutationMetadata {
+                        data: "I am a mutation".to_owned(),
+                    },
+                )?;
+                Ok(())
+            })?
+        };
+        Ok(holder.into_python_tables(py)?)
     }
 }
