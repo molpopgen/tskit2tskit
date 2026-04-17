@@ -58,3 +58,66 @@ Importantly, most installations of Python are **not** debug versions.
 We expect developers of downstream tools to understand how to install debug versions on their supported platforms.
 ([`uv`](https://docs.astral.sh/uv/) is one of many methods for installing debug versions of the Python interpreter but you may experience linkage issues at runtime.)
 The reason for this suggestion is that certain types of memory errors can only be reliably caught using the debug interpreter.
+
+# Core functionality
+
+## Working with an encapsulation of `tskit::TableCollection`.
+
+`SharedTableCollection` is an opaque wrapper around a rust
+`tskit::TableCollection` and a Python `tskit._tskit.TableCollection`.
+(the low-level wrapper around the C type `tsk_table_collection_t`).
+By means of some `unsafe` magic, these two objects *share* a pointer
+to the same `tsk_table_collection_t`.
+
+The high-level idea is that we can modify the tables in rust and then
+return them to Python, consuming the holder instance.
+
+By way of example:
+
+```rust
+use pyo3::prelude::*;
+
+/// A Python module implemented in Rust.
+#[pymodule]
+// The setup is designed for a mixed rust/python
+// project. We compile the rust side to the following name,
+// with the intent that __init__.py imports this to bring
+// the public API into scope.
+#[pyo3(name = "_maketrees")]
+mod maketrees {
+    use pyo3::prelude::*;
+    #[pyfunction]
+    fn maketrees(py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let mut holder = tskit2tskit::SharedTableCollection::new(py, 100.0).unwrap();
+        // Release the gil to work only on the rust side of the data,
+        // potentially allowing other Python threads to run.
+        py.detach(|| -> Result<(), PyErr> {
+            // SAFETY: the code below is safe if tskit-rust and tskit-python
+            // are built around the same layout for `tsk_table_collection_t`.
+            Ok(unsafe {
+                // In order to modify a table collection, we define a function
+                // that operates on an exclusive reference to the tables.
+                // The return value of this function is generic and therefore
+                // up to developers of downstream code.
+                // Here, we use a closure that returns a `Result`.
+                // This operation is `unsafe` because an ABI mismatch between Python
+                // and rust will lead to undefined behavior.
+                holder.with_mut_tables(|t: &mut tskit::TableCollection| -> Result<(), tskit2tskit::Error> {
+                    // Everything in this block is the standard tskit rust API.
+                    // Note that the use of ? will convert and TskitError into
+                    // a tskit2tskit::Error.
+                    let parent = t.add_node(0, 1.0, -1, -1)?;
+                    let c0 = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
+                    let c1 = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
+                    t.add_edge(0., 100., parent, c0)?;
+                    t.add_edge(0., 100., parent, c1)?;
+                    Ok(())
+                })
+            }?) // The ? here will convert tskit2tskit::Error into a PyErr
+        })?;
+        // Returns Python tskit.TreeSequence
+        // Again, error types will propagate into PyErr as needed.
+        Ok(holder.into_python_tree_sequence(py)?)
+    }
+}
+```

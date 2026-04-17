@@ -20,7 +20,7 @@ mod maketrees {
             Ok(unsafe {
                 holder.with_mut_tables(|t| -> Result<(), tskit2tskit::Error> {
                     // Everything in this block is the standard tskit rust API.
-                    // Note that the use if ? will convert and TskitError into
+                    // Note that the use of ? will convert and TskitError into
                     // a tskit2tskit::Error.
                     let parent = t.add_node(0, 1.0, -1, -1)?;
                     let c0 = t.add_node(tskit::NodeFlags::IS_SAMPLE, 0.0, -1, -1)?;
