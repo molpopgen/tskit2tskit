@@ -167,39 +167,46 @@ struct SimParams {
 fn main() -> Result<(), Error> {
     let params = SimParams::parse();
 
-    // We will allocate the tables via Python allocator.
-    // Therefore, we must run in an interpreter with the GiL
-    // attached.
-    // NOTE: doing this specific example this way is NOT useful!
-    // As a CLI app, we should just call rust_treeseq.dump(...) and
-    // move on. But the concept is generally useful -- one can write
-    // a Python package in rust and then transfer data (zero-copy!)
-    // to the "real" tskit-python so that analysis can take place!
-    Python::attach(|py| -> Result<(), Error> {
-        let mut holder = tskit2tskit::SharedTableCollection::new(py, 1.0)?;
+    // We will allocate the tables via Python allocator,
+    // which requires a Python interpreter
+    let mut holder = Python::attach(|py| -> Result<tskit2tskit::SharedTableCollection, Error> {
+        Ok(tskit2tskit::SharedTableCollection::new(py, 1.0)?)
+    })?;
 
-        // SAFETY: the following call is safe if tskit-rust and tskit-python
-        // have the same ABI for tsk_table_collection_t.
-        // Further, we must know that the layout of the low-level _tskit.TableCollection
-        // is as described in the README of this crate.
-        // At the time of this writing, these requirements are upheld.
-        unsafe {
-            holder.with_mut_tables(|tables| {
-                simulate(
-                    params.seed,
-                    params.popsize,
-                    params.num_generations,
-                    params.simplify_interval,
-                    params.bookmark,
-                    tables,
-                )
-            })
-        }?;
-        if let Some(filename) = params.treefile {
+    // SAFETY: the following call is safe if tskit-rust and tskit-python
+    // have the same ABI for tsk_table_collection_t.
+    // Further, we must know that the layout of the low-level _tskit.TableCollection
+    // is as described in the README of this crate.
+    // At the time of this writing, these requirements are upheld.
+    // NOTE: none of what happens below depends on where the
+    // tsk_table_collection_t * allocation came from, and can
+    // be run "unnattached" to an interpreter.
+    unsafe {
+        holder.with_mut_tables(|tables| {
+            simulate(
+                params.seed,
+                params.popsize,
+                params.num_generations,
+                params.simplify_interval,
+                params.bookmark,
+                tables,
+            )
+        })
+    }?;
+
+    // We can reattach to the intepreter if necessary
+    if let Some(filename) = params.treefile {
+        // NOTE: doing this specific example this way is NOT useful!
+        // As a CLI app, we should just call rust_treeseq.dump(...) and
+        // move on. But the concept is generally useful -- one can write
+        // a Python package in rust and then transfer data (zero-copy!)
+        // to the "real" tskit-python so that analysis can take place!
+        Python::attach(|py| -> Result<(), Error> {
             let python_treeseq = holder.into_python_tree_sequence(py)?;
             pyo3::py_run!(py, python_treeseq, "print(python_treeseq)");
             python_treeseq.getattr(py, "dump")?.call1(py, (filename,))?;
-        }
-        Ok(())
-    })
+            Ok(())
+        })?;
+    }
+    Ok(())
 }
