@@ -70,4 +70,16 @@ mod maketrees {
         let holder = tskit2tskit::SharedTableCollection::new(py, f64::NAN)?;
         Ok(holder.into_python_tables(py)?)
     }
+
+    #[pyfunction]
+    fn clear_shared_tables(py: Python<'_>, pytables: Py<PyAny>) -> PyResult<()> {
+        let mut holder =
+            unsafe { tskit2tskit::SharedTableCollection::new_from_tables(py, pytables) }?;
+        unsafe {
+            holder.with_mut_tables(|tables| {
+                tables.clear(0).unwrap();
+            })
+        };
+        Ok(())
+    }
 }

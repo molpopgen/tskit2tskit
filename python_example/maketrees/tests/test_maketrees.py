@@ -22,6 +22,14 @@ def test_metadata():
     assert m['data'] == "I am a mutation"
 
 
+def test_mutable_sharing_of_tables():
+    tables = tskit.TableCollection(100)
+    tables.nodes.add_row(0, 0.0, -1, -1)
+    assert tables.nodes.num_rows == 1
+    maketrees.clear_shared_tables(tables)
+    assert tables.nodes.num_rows == 0
+
+
 def test_raise():
     try:
         _ = maketrees.raise_error()
