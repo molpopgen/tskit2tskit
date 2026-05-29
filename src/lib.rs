@@ -111,6 +111,40 @@ impl SharedTableCollection {
         })
     }
 
+    /// Constructor to borrow data from a table collection from tskit-python
+    ///
+    /// # Parameters
+    ///
+    /// * `pytables`: a `tskit.TableCollection` from `tskit-python`
+    ///
+    /// # Safety
+    ///
+    /// * `tskit-python` and `tskit-rust` must share the same memory layout
+    ///   for `tsk_table_collection_t`.
+    pub unsafe fn new_from_tables<'py>(
+        py: Python<'py>,
+        pytables: Py<PyAny>,
+    ) -> Result<Self, Error> {
+        let ll_tables = pytables.getattr(py, "_ll_tables")?;
+        assert!(!ll_tables.as_ptr().is_null());
+        // SAFETY: ll_tables is a valid pointer to the low-level type.
+        // (Else we'd have gotten an error above.)
+        // The pointer is not NULL and it MUST have been initialized
+        // by tskit-python.
+        let ptr = unsafe { read_tsk_ptr(ll_tables.as_ptr()) };
+        assert!(!ptr.is_null());
+        // SAFETY: ptr is not NULL
+        assert!(!unsafe { *ptr }.is_null());
+        // SAFETY: nothing is NULL
+        // The pointee has been initialized w/o error over in Python
+        let tables =
+            unsafe { tskit::TableCollection::new_from_raw(std::ptr::NonNull::new(*ptr).unwrap()) }?;
+        Ok(Self {
+            tables: Some(tables),
+            pytables: Some(pytables),
+        })
+    }
+
     unsafe fn as_rust(&self) -> &tskit::TableCollection {
         self.tables.as_ref().unwrap()
     }
