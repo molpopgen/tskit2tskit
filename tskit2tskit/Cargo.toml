@@ -1,0 +1,22 @@
+[package]
+name = "tskit2tskit"
+version = "0.1.0-alpha.0"
+description = "Data exchange between tskit (rust) and tskit (python)"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+libc = "0.2.183"
+pyo3 = { workspace = true }
+tskit = { workspace = true, features = ["bindings", "unsafe_init"] }
+
+[dev-dependencies]
+pyo3 = { workspace = true, features = ["auto-initialize"] }
+clap = { version = ">=4", features = ["derive"] }
+rand = "0.8.3"
+
+[[example]]
+name = "haploid_wright_fisher"

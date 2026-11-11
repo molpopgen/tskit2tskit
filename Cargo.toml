@@ -1,22 +1,27 @@
-[package]
-name = "tskit2tskit"
-version = "0.1.0-alpha.0"
+[workspace]
+resolver = "3"
+
+members = [
+    "tskit2tskit",
+    "maketrees"
+]
+
+[workspace.package]
 edition = "2021"
-rust-version = "1.88.0"
-description = "Data exchange between tskit (rust) and tskit (python)"
-license = "MIT"
 homepage = "https://github.com/molpopgen/tskit2tskit"
 repository = "https://github.com/molpopgen/tskit2tskit"
+rust-version = "1.88.0"
+license = "MIT"
 
-[dependencies]
-libc = "0.2.183"
-pyo3 = ">=0.28.3"
-tskit = { version = "0.16.4-alpha.0", features = ["bindings", "unsafe_init"] }
+[workspace.dependencies]
+# dependencies
+tskit = { version = "0.16.4-alpha.0" }
+pyo3 = { version = ">=0.28.3" }
 
-[dev-dependencies]
-pyo3 = { version = ">=0.28.3", features = ["auto-initialize"] }
-clap = { version = ">=4", features = ["derive"] }
-rand = "0.8.3"
+[workspace.lints.rust]
+# Added for rust 1.80.0
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(doc_cfg)'] }
+missing_docs = "warn"
 
-[[example]]
-name = "haploid_wright_fisher"
+[workspace.lints.rustdoc]
+broken_intra_doc_links = { level = "deny" }
