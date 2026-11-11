@@ -10,8 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = ">=0.28.3"
-# tskit = { version=">=0.15.0", features = ["derive"] }
-tskit = { git = "https://github.com/tskit-dev/tskit-rust", features = ["derive"] }
+tskit = { version="0.16.4-alpha.0", features = ["derive"] }
 serde = "*"
 serde_json = "*"
 tskit2tskit = { version = "0.1.0-alpha.0", path = "../.."}
