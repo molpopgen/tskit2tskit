@@ -52,6 +52,27 @@ fn test_borrow_tables_from_python() {
             unsafe { tskit2tskit::SharedTableCollection::new_from_tables(py, pytables) }.unwrap();
         unsafe { holder.with_tables(|tables| assert_eq!(tables.sequence_length(), 100.)) };
         unsafe { holder.with_mut_tables(|tables| tables.add_node(0, 0., -1, -1).unwrap()) };
-        py.run(cr"assert tables.nodes.num_rows == 1", None, None).unwrap();
+        py.run(cr"assert tables.nodes.num_rows == 1", None, None)
+            .unwrap();
     });
+}
+
+#[test]
+fn test_borrow_treeseq_from_python() {
+    Python::attach(|py| {
+        py.run(cr"import tskit", None, None).unwrap();
+        py.run(cr"tables = tskit.TableCollection(100) ", None, None)
+            .unwrap();
+        py.run(cr"ts = tables.tree_sequence()", None, None).unwrap();
+        let pyts = py
+            .eval(c"ts", None, None)
+            .map_err(|e| {
+                e.print_and_set_sys_last_vars(py);
+            })
+            .unwrap()
+            .unbind();
+        let holder =
+            unsafe { tskit2tskit::SharedTreeSequence::new_from_tree_sequence(py, pyts) }.unwrap();
+        unsafe { holder.with_treeseq(|ts| assert_eq!(ts.tables().sequence_length(), 100.)) };
+    })
 }

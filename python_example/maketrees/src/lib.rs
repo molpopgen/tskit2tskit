@@ -82,4 +82,27 @@ mod maketrees {
         };
         Ok(())
     }
+
+    #[pyclass]
+    struct TreeSeqHolder {
+        holder: tskit2tskit::SharedTreeSequence,
+    }
+
+    #[pymethods]
+    impl TreeSeqHolder {
+        #[new]
+        pub fn new(py: Python<'_>, ts: Py<PyAny>) -> PyResult<Self> {
+            let holder =
+                unsafe { tskit2tskit::SharedTreeSequence::new_from_tree_sequence(py, ts) }?;
+            Ok(Self { holder })
+        }
+
+        #[getter]
+        pub fn sequence_length(&self) -> f64 {
+            unsafe {
+                self.holder
+                    .with_treeseq(|ts| ts.tables().sequence_length().into())
+            }
+        }
+    }
 }
