@@ -567,8 +567,9 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "tskit"
-version = "0.16.3"
-source = "git+https://github.com/tskit-dev/tskit-rust#e61b3b6de9ca02f92ca85e7ca02fec32b82d0ee5"
+version = "0.16.4-alpha.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ab7ac6567979a218a66b1d420c9cac52b7f7eb7752fef07e32bb29bbec896d6"
 dependencies = [
  "bindgen",
  "cc",
