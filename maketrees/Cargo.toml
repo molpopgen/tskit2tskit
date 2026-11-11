@@ -1,0 +1,21 @@
+[package]
+name = "maketrees"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "maketrees"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { workspace = true }
+tskit = { workspace = true, features = ["derive"] }
+serde = "*"
+serde_json = "*"
+tskit2tskit = { version = "0.1.0-alpha.0", path = "../tskit2tskit"}

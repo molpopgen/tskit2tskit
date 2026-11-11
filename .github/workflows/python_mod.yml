@@ -37,7 +37,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install package
         run: |
-          uv sync --project=python_example/maketrees/tests
+          uv sync --project=maketrees
       - name: Run Python-side tests
         run: |
-          LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run --project=python_example/maketrees/tests python -m pytest python_example/maketrees/tests
+          LD_LIBRARY_PATH=$(dirname "$(realpath "$(uv python find)")")/../lib uv run --project=maketrees python -m pytest maketrees/tests
