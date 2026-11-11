@@ -269,6 +269,60 @@ impl SharedTableCollection {
     }
 }
 
+#[allow(missing_docs)]
+pub struct SharedTreeSequence {
+    treeseq: Option<tskit::TreeSequence>,
+    pytree_sequence: Option<Py<PyAny>>,
+}
+
+impl SharedTreeSequence {
+    #[allow(missing_docs)]
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn new_from_tree_sequence<'py>(
+        py: Python<'py>,
+        pytree_sequence: Py<PyAny>,
+    ) -> Result<Self, Error> {
+        let ll_tree_sequence = pytree_sequence.getattr(py, "ll_tree_sequence")?;
+        assert!(!ll_tree_sequence.as_ptr().is_null());
+        // SAFETY: initialization happened just fine on the Python side
+        let ptr = unsafe { read_tree_sequence_ptr(ll_tree_sequence.as_ptr()) };
+        assert!(!ptr.is_null());
+        let nn = std::ptr::NonNull::new(*ptr).unwrap();
+        assert!(!(nn.as_ref()).tables.is_null());
+        unsafe { tskit::bindings::tsk_treeseq_get_sequence_length(nn.as_ptr()) };
+        let treeseq = unsafe { tskit::TreeSequence::new_from_raw(nn) }?;
+        Ok(Self {
+            treeseq: Some(treeseq),
+            pytree_sequence: Some(pytree_sequence),
+        })
+    }
+
+    unsafe fn as_rust(&self) -> &tskit::TreeSequence {
+        self.treeseq.as_ref().unwrap()
+    }
+
+    #[allow(missing_docs)]
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn with_treeseq<F, R>(&self, mut f: F) -> R
+    where
+        F: FnMut(&tskit::TreeSequence) -> R,
+    {
+        f(self.as_rust())
+    }
+}
+
+impl Drop for SharedTreeSequence {
+    fn drop(&mut self) {
+        if self.treeseq.is_some() {
+            let t = self.treeseq.take().unwrap();
+            let _ = t.into_mut_ptr();
+        }
+        if self.pytree_sequence.is_some() {
+            self.pytree_sequence.take().unwrap();
+        }
+    }
+}
+
 unsafe fn read_tsk_ptr(
     py_obj: *mut pyo3::ffi::PyObject,
 ) -> *mut *mut tskit::bindings::tsk_table_collection_t {
@@ -277,6 +331,17 @@ unsafe fn read_tsk_ptr(
         // tsk_table_collection_t immediately after PyObject_HEAD (offset 16).
         let offset = std::mem::size_of::<pyo3::ffi::PyObject>();
         (py_obj as *mut u8).add(offset) as *mut *mut tskit::bindings::tsk_table_collection_t
+    }
+}
+
+unsafe fn read_tree_sequence_ptr(
+    py_obj: *mut pyo3::ffi::PyObject,
+) -> *mut *mut tskit::bindings::tsk_treeseq_t {
+    unsafe {
+        // _tskit.TreeSequence stores a *pointer* to a heap-allocated
+        // tsk_treeseq_t immediately after PyObject_HEAD (offset 16).
+        let offset = std::mem::size_of::<pyo3::ffi::PyObject>();
+        (py_obj as *mut u8).add(offset) as *mut *mut tskit::bindings::tsk_treeseq_t
     }
 }
 
