@@ -1,6 +1,6 @@
 [package]
 name = "tskit2tskit"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 description = "Data exchange between tskit (rust) and tskit (python)"
 edition.workspace = true
 rust-version.workspace = true
