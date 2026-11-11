@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0-alpha.1] - 2026-11-11
+
+### Documentation
+
+- Update example to show how we can run rust code outside interpreter ([#42](https://github.com/tskit-dev/tskit-rust/pull/42))
+
+### Features
+
+- Borrow pointer from python TableCollection ([#43](https://github.com/tskit-dev/tskit-rust/pull/43))
+- Share tree sequence with Python ([#45](https://github.com/tskit-dev/tskit-rust/pull/45))
+
+### Miscellaneous Tasks
+
+- Bump tskit version ([#46](https://github.com/tskit-dev/tskit-rust/pull/46))
+- Reorganize as cargo workspace ([#47](https://github.com/tskit-dev/tskit-rust/pull/47))
+
+### Testing
+
+- Exception visibility in Python ([#39](https://github.com/tskit-dev/tskit-rust/pull/39))
+- Extra asserts plus a tidy up ([#40](https://github.com/tskit-dev/tskit-rust/pull/40))
+
 ## [0.1.0-alpha.0] - 2026-04-17
 
 ### Documentation
