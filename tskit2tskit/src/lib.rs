@@ -288,6 +288,35 @@ impl SharedTreeSequence {
     ///
     /// * `tskit-python` and `tskit-rust` must share the same memory layout
     ///   for `tsk_treeseq_t`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use pyo3::prelude::*;
+    /// # use tskit2tskit::SharedTreeSequence;
+    /// Python::attach(|py| {
+    ///    // Some basic setup in a Python interpreter
+    ///    py.run(cr"import tskit", None, None).unwrap();
+    ///    py.run(cr"tables = tskit.TableCollection(100) ", None, None).unwrap();
+    ///    py.run(cr"ts = tables.tree_sequence()", None, None).unwrap();
+    ///    // Get a rust-side object representing the tskit.TreeSequence
+    ///    // that's been generated in Python
+    ///    let pyts = py
+    ///        .eval(c"ts", None, None)
+    ///        .map_err(|e| {
+    ///            e.print_and_set_sys_last_vars(py);
+    ///        })
+    ///        .unwrap()
+    ///        .unbind();
+    ///     // SAFETY: tkist-rust and tskit-python are compiled with the same
+    ///     // layout for tsk_treeseq_t
+    ///     let ts = unsafe { SharedTreeSequence::new_from_tree_sequence(py, pyts) }.unwrap();
+    ///     let seqlen = unsafe {
+    ///         ts.with_treeseq(|ts| {ts.tables().sequence_length()})
+    ///     };
+    ///     assert_eq!(seqlen, 100.0);
+    /// });
+    /// ```
     pub unsafe fn new_from_tree_sequence<'py>(
         py: Python<'py>,
         pyts: Py<PyAny>,
@@ -317,6 +346,35 @@ impl SharedTreeSequence {
     ///
     /// * `tskit-rust` and `tskit-python` must have the same layout
     ///   for `tsk_treeseq_t`
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use pyo3::prelude::*;
+    /// # use tskit2tskit::SharedTreeSequence;
+    /// # Python::attach(|py| {
+    /// #    // Some basic setup in a Python interpreter
+    /// #    py.run(cr"import tskit", None, None).unwrap();
+    /// #    py.run(cr"tables = tskit.TableCollection(100) ", None, None).unwrap();
+    /// #    py.run(cr"ts = tables.tree_sequence()", None, None).unwrap();
+    /// #    // Get a rust-side object representing the tskit.TreeSequence
+    /// #    // that's been generated in Python
+    /// #    let pyts = py
+    /// #        .eval(c"ts", None, None)
+    /// #        .map_err(|e| {
+    /// #            e.print_and_set_sys_last_vars(py);
+    /// #        })
+    /// #        .unwrap()
+    /// #        .unbind();
+    /// #     // SAFETY: tkist-rust and tskit-python are compiled with the same
+    /// #     // layout for tsk_treeseq_t
+    /// #     let ts = unsafe { SharedTreeSequence::new_from_tree_sequence(py, pyts) }.unwrap();
+    ///     let seqlen = unsafe {
+    ///         ts.with_treeseq(|ts| {ts.tables().sequence_length()})
+    ///     };
+    /// #     assert_eq!(seqlen, 100.0);
+    /// # });
+    /// ```
     pub unsafe fn with_treeseq<F, R>(&self, mut f: F) -> R
     where
         F: FnMut(&tskit::TreeSequence) -> R,
