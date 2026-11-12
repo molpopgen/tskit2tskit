@@ -269,20 +269,30 @@ impl SharedTableCollection {
     }
 }
 
-#[allow(missing_docs)]
+/// Holds an instance of [`tskit::TreeSequence`] and
+/// a Python `_tskit.TreeSequence` (the so-called
+/// "low-level" implementation of a tree sequence.)
 pub struct SharedTreeSequence {
     treeseq: Option<tskit::TreeSequence>,
     pytree_sequence: Option<Py<PyAny>>,
 }
 
 impl SharedTreeSequence {
-    #[allow(missing_docs)]
-    #[allow(clippy::missing_safety_doc)]
+    /// Constructor to borrow data from a tree sequence from tskit-python
+    ///
+    /// # Parameters
+    ///
+    /// * `pyts`: a `tskit.TreeSequence` from `tskit-python`
+    ///
+    /// # Safety
+    ///
+    /// * `tskit-python` and `tskit-rust` must share the same memory layout
+    ///   for `tsk_treeseq_t`.
     pub unsafe fn new_from_tree_sequence<'py>(
         py: Python<'py>,
-        pytree_sequence: Py<PyAny>,
+        pyts: Py<PyAny>,
     ) -> Result<Self, Error> {
-        let ll_tree_sequence = pytree_sequence.getattr(py, "ll_tree_sequence")?;
+        let ll_tree_sequence = pyts.getattr(py, "ll_tree_sequence")?;
         assert!(!ll_tree_sequence.as_ptr().is_null());
         // SAFETY: initialization happened just fine on the Python side
         let ptr = unsafe { read_tree_sequence_ptr(ll_tree_sequence.as_ptr()) };
@@ -293,7 +303,7 @@ impl SharedTreeSequence {
         let treeseq = unsafe { tskit::TreeSequence::new_from_raw(nn) }?;
         Ok(Self {
             treeseq: Some(treeseq),
-            pytree_sequence: Some(pytree_sequence),
+            pytree_sequence: Some(pyts),
         })
     }
 
@@ -301,8 +311,12 @@ impl SharedTreeSequence {
         self.treeseq.as_ref().unwrap()
     }
 
-    #[allow(missing_docs)]
-    #[allow(clippy::missing_safety_doc)]
+    /// Perform operations on an immutable [`tskit::TreeSequence`]
+    ///
+    /// # Safety
+    ///
+    /// * `tskit-rust` and `tskit-python` must have the same layout
+    ///   for `tsk_treeseq_t`
     pub unsafe fn with_treeseq<F, R>(&self, mut f: F) -> R
     where
         F: FnMut(&tskit::TreeSequence) -> R,
