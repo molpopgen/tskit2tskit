@@ -86,10 +86,10 @@ impl SharedTableCollection {
     ) -> Result<Self, Error> {
         let sequence_length: f64 = sequence_length.into().into();
         if !sequence_length.is_finite() || sequence_length <= 0.0 {
-            return Err(tskit::TskitError::ValueError {
+            return Err(Error::TskitRust(tskit::TskitError::ValueError {
                 got: sequence_length.to_string(),
                 expected: "sequence_length >= 0.0".to_string(),
-            })?;
+            }));
         }
         let ll_tskit = py.import("_tskit")?;
         let pytables = ll_tskit
