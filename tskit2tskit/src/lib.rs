@@ -103,8 +103,9 @@ impl SharedTableCollection {
         assert!(!unsafe { *ptr }.is_null());
         // SAFETY: nothing is NULL
         // The pointee has been initialized w/o error over in Python
-        let tables =
-            unsafe { tskit::TableCollection::new_from_raw(std::ptr::NonNull::new(*ptr).unwrap()) }?;
+        let tables = unsafe {
+            tskit::TableCollection::new_borrowed_from_raw(std::ptr::NonNull::new(*ptr).unwrap())
+        }?;
         Ok(Self {
             tables: Some(tables),
             pytables: Some(pytables),
@@ -137,8 +138,9 @@ impl SharedTableCollection {
         assert!(!unsafe { *ptr }.is_null());
         // SAFETY: nothing is NULL
         // The pointee has been initialized w/o error over in Python
-        let tables =
-            unsafe { tskit::TableCollection::new_from_raw(std::ptr::NonNull::new(*ptr).unwrap()) }?;
+        let tables = unsafe {
+            tskit::TableCollection::new_borrowed_from_raw(std::ptr::NonNull::new(*ptr).unwrap())
+        }?;
         Ok(Self {
             tables: Some(tables),
             pytables: Some(pytables),
@@ -329,7 +331,7 @@ impl SharedTreeSequence {
         let nn = std::ptr::NonNull::new(*ptr).unwrap();
         assert!(!(nn.as_ref()).tables.is_null());
         unsafe { tskit::bindings::tsk_treeseq_get_sequence_length(nn.as_ptr()) };
-        let treeseq = unsafe { tskit::TreeSequence::new_from_raw(nn) }?;
+        let treeseq = unsafe { tskit::TreeSequence::new_borrowed_from_raw(nn) }?;
         Ok(Self {
             treeseq: Some(treeseq),
             pytree_sequence: Some(pyts),

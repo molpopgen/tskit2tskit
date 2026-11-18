@@ -16,6 +16,6 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { workspace = true }
 tskit = { workspace = true, features = ["derive"] }
-serde = "*"
+serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 tskit2tskit = { version = "0.1.0-alpha.0", path = "../tskit2tskit"}
